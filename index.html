@@ -401,7 +401,7 @@ img{pointer-events:none;user-select:none;-webkit-user-drag:none}
   border-right:1px dashed rgba(232,200,116,.25);
   position:relative;min-height:280px;
 }
-.volume-sep-label{font:700 18px/1 'Noto Serif SC',serif;letter-spacing:.4em;color:#e8c874}
+.volume-sep-label{font:700 18px/1 'Noto Serif SC',serif;letter-spacing:.4em;color:#000}
 .volume-sep-en{font:500 8px/1.2 system-ui,serif;letter-spacing:.18em;color:rgba(232,200,116,.6);text-transform:uppercase;text-align:center}
 .volume-sep-line{width:1px;height:24px;background:linear-gradient(to bottom,transparent,rgba(232,200,116,.5),transparent)}
 
@@ -1171,7 +1171,7 @@ img{pointer-events:none;user-select:none;-webkit-user-drag:none}
       <div class="en" id="scrollEn">LICHUN · START OF SPRING</div>
       <div class="quote" id="scrollQuote">风 入 屠 苏 ，春 回 万 物</div>
       <p class="desc" id="scrollDesc"></p>
-      <div class="seal">孟 春 之 始</div>
+      <div class="seal" id="scrollSeal">立 春 之 始</div>
       <button class="scroll-cta" id="scrollCta">轻 点 · 进 入 仪 式</button>
     </div>
     <div class="shade"></div>
@@ -1713,6 +1713,7 @@ function startScrollSequence(){
   $('#scrollEn').textContent = `${t.en} · ${t.title}`;
   $('#scrollQuote').textContent = t.quote;
   $('#scrollDesc').textContent = t.desc;
+  $('#scrollSeal').textContent = `${t.name}之始`;
 
   const paper = $('#scrollPaper');
   const axisL = $('#axisL');

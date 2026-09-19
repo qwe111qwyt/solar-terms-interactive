@@ -1,0 +1,2985 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0e1a14">
+<title>节序循时 · 二十四节气沉浸式交互</title>
+<style>
+:root{
+  --paper:    #f0e4cc;
+  --paper-d:  #d8c8a4;
+  --paper-f:  #f6ecd6;
+  --ink:      #1a1410;
+  --ink-mid:  #5a463a;
+  --cinnabar: #a83228;
+  --jade:     #5a8266;
+  --gold:     #b07d3a;
+  --t: 500ms cubic-bezier(.4,.2,.2,1);
+  color-scheme: dark;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{
+  width:100%;height:100%;overflow:hidden;
+  font-family:"Songti SC","STSong","Noto Serif SC",SimSun,serif;
+  color:#e7e3d6;
+  background:#0a0e0c;
+  overscroll-behavior:none;
+  user-select:none;
+  touch-action:none;
+}
+body{display:grid;place-items:center}
+button{font:inherit;-webkit-tap-highlight-color:transparent}
+img{pointer-events:none;user-select:none;-webkit-user-drag:none}
+[hidden]{display:none!important}
+
+/* =========== 9:16 满屏舞台 =========== */
+.shell{
+  position:relative;
+  width:100vw;max-width:calc(100dvh * 9 / 16);height:100dvh;
+  overflow:hidden;
+  background:#0a0e0c;
+  box-shadow:0 0 0 1px rgba(220,226,218,.12),0 26px 70px #000;
+  isolation:isolate;
+  user-select:none;
+  touch-action:none;
+}
+.scene,.scene-bg,.shade,.grain,.petals-canvas,.ink-canvas,.spark-canvas,.ripple-canvas{
+  position:absolute;inset:0;
+}
+.scene{overflow:hidden;touch-action:none}
+/* 封面需要竖向滚动 */
+.intro{overflow-y:auto;overflow-x:hidden;touch-action:pan-y;-webkit-overflow-scrolling:touch}
+.intro .intro-stage{overflow:visible}
+.scene-bg{width:100%;height:100%;object-fit:cover;z-index:-5;pointer-events:none}
+.shade{z-index:28;pointer-events:none;background:linear-gradient(to bottom,rgba(4,8,6,.55),transparent 28%,transparent 66%,rgba(3,5,4,.75))}
+.grain{
+  z-index:90;pointer-events:none;opacity:.1;mix-blend-mode:soft-light;
+  background-image:url("data:image/svg+xml;utf8,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.7'/%3E%3C/svg%3E");
+}
+.petals-canvas{z-index:18;pointer-events:none}
+.ink-canvas{z-index:36;pointer-events:none}
+.spark-canvas{z-index:34;pointer-events:none}
+.ripple-canvas{z-index:33;pointer-events:none}
+
+/* =========== 顶部条 =========== */
+.topbar{
+  position:absolute;
+  top:calc(env(safe-area-inset-top) + 14px);left:18px;right:18px;z-index:70;
+  display:flex;align-items:center;justify-content:space-between;
+  pointer-events:none;
+}
+.chapter-mark{display:flex;align-items:center;gap:8px;min-width:0;flex:1;overflow:hidden}
+.chapter-no{color:#c5ccc6;font:600 9px/1.2 system-ui,sans-serif;letter-spacing:.2em;flex:none}
+.chapter-line{width:24px;height:1px;background:rgba(227,231,226,.5);flex:none}
+.chapter-name{overflow:hidden;color:#eceeea;font-size:13px;white-space:nowrap;letter-spacing:.15em;text-overflow:ellipsis}
+.icon-actions{display:flex;gap:6px;pointer-events:auto;flex:none}
+.icon-btn{
+  display:grid;place-items:center;width:34px;height:34px;padding:0;
+  border:1px solid rgba(226,232,226,.3);border-radius:50%;
+  color:#e6e9e5;background:rgba(13,18,15,.54);
+  backdrop-filter:blur(10px);cursor:pointer;
+}
+.icon-btn svg{width:15px;height:15px}
+.icon-btn:active{transform:scale(.92)}
+
+/* =========== 状态条 =========== */
+.status{
+  position:absolute;
+  top:calc(env(safe-area-inset-top) + 60px);left:22px;right:22px;z-index:45;
+  display:grid;grid-template-columns:repeat(4,1fr);gap:8px;
+}
+.status-cell{display:grid;grid-template-rows:auto 1fr;gap:5px;cursor:pointer}
+.status-label{color:rgba(231,235,231,.66);font:600 9px/1.2 system-ui,sans-serif;letter-spacing:.2em;display:flex;align-items:center;gap:5px;transition:color .4s}
+.status-cell .cn{color:rgba(232,200,116,.5);font-size:10px;letter-spacing:.1em;transition:color .4s}
+.status-track{height:2px;overflow:hidden;background:rgba(255,255,255,.13)}
+.status-fill{width:100%;height:100%;background:linear-gradient(90deg,rgba(232,200,116,.4),rgba(232,200,116,.95));transform:scaleX(0);transform-origin:left center;transition:transform .6s ease}
+.status-cell.active .status-fill{transform:scaleX(1)}
+.status-cell.active .status-label{color:#e8c874}
+.status-cell.active .cn{color:#e8c874}
+.status-cell.passed .status-fill{transform:scaleX(1);background:rgba(168,50,40,.6)}
+.status-cell.passed .cn{color:var(--cinnabar)}
+
+.status-detail{
+  position:absolute;
+  top:calc(env(safe-area-inset-top) + 95px);left:22px;right:22px;z-index:45;
+  display:flex;justify-content:space-between;align-items:center;
+  font:600 9px/1.2 system-ui,sans-serif;letter-spacing:.3em;color:rgba(231,235,231,.5);
+}
+.status-detail .pct{color:#e8c874;font-size:11px}
+.status-detail .step{color:rgba(231,235,231,.4)}
+
+/* =========== 封面 =========== */
+.intro{z-index:80;background:#0e1a14}
+.intro-bg{filter:saturate(.85) contrast(1.05) brightness(.85);animation:bg-pan 24s ease-in-out infinite alternate}
+@keyframes bg-pan{from{transform:scale(1.04) translateX(0)}to{transform:scale(1.1) translateX(-2%)}}
+.intro-shade{z-index:-2;background:linear-gradient(to bottom,rgba(8,11,9,.08) 20%,rgba(8,11,9,.25) 45%,rgba(8,11,9,.96) 88%)}
+.intro-copy{
+  position:absolute;left:28px;right:28px;
+  bottom:calc(env(safe-area-inset-bottom) + 32px);z-index:2;
+}
+.archive-code{color:rgba(224,229,223,.66);font:600 9px/1.4 system-ui,sans-serif;letter-spacing:.3em;margin:0 0 12px}
+.title{margin:0;font-size:54px;line-height:1;font-weight:600;letter-spacing:.15em;text-shadow:0 2px 18px #000}
+.subtitle{margin:18px 0 24px;max-width:340px;color:rgba(234,236,232,.79);font-size:13px;line-height:1.85;letter-spacing:.1em}
+.primary-btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:10px;
+  min-height:48px;padding:14px 30px;
+  border:1px solid rgba(227,232,225,.46);border-radius:2px;
+  color:#f3f4f0;background:rgba(28,34,29,.82);cursor:pointer;
+  font-size:13px;letter-spacing:.25em;transition:all var(--t);
+  white-space:nowrap;
+}
+.primary-btn:hover{background:rgba(45,55,48,.95);border-color:rgba(227,232,225,.7)}
+.primary-btn:active{transform:scale(.98)}
+.primary-btn svg{width:16px;height:16px;transition:transform .3s}
+.primary-btn:hover svg{transform:translateX(4px)}
+.text-btn{display:block;margin:12px auto 0;padding:6px 9px;border:0;border-bottom:1px solid rgba(235,239,233,.35);color:rgba(238,240,236,.76);background:transparent;font:11px/1.3 system-ui,sans-serif;cursor:pointer}
+.intro-note{margin:12px 0 0;color:rgba(224,228,222,.5);font:10px/1.5 system-ui,sans-serif;text-align:center}
+.intro .corner-seal{
+  position:absolute;top:calc(env(safe-area-inset-top) + 28px);right:28px;
+  width:42px;height:42px;border:1px solid rgba(232,200,116,.45);color:rgba(232,200,116,.7);
+  display:flex;align-items:center;justify-content:center;
+  font:600 8px/1.15 'Noto Serif SC',serif;letter-spacing:.18em;
+  writing-mode:vertical-rl;text-orientation:upright;
+  border-radius:2px;background:rgba(168,50,40,.08);
+  transform:rotate(-3deg);opacity:.7;z-index:4;
+  animation:seal-bob 4s ease-in-out infinite;
+}
+@keyframes seal-bob{0%,100%{transform:rotate(-3deg) translateY(0)}50%{transform:rotate(-3deg) translateY(-3px)}}
+
+/* 封面节选二十四节气徽章（已迁移至新设计，本块留作兼容性兜底） */
+.term-tiles{display:none}
+.term-tile{display:none}
+
+/* =====================================================
+   首页 · 节序长卷（重新设计）
+   ===================================================== */
+.intro-stage{
+  position:absolute;left:0;right:0;top:0;bottom:0;
+  display:flex;flex-direction:column;
+  padding:calc(env(safe-area-inset-top) + 24px) 28px calc(env(safe-area-inset-bottom) + 28px);
+  z-index:3;
+}
+
+/* 顶部标题区 */
+.intro-header{
+  display:flex;align-items:flex-end;justify-content:space-between;
+  gap:32px;margin-bottom:18px;flex-shrink:0;
+  flex-wrap:nowrap;
+}
+.intro-header-left{display:flex;flex-direction:column;gap:6px;min-width:0;flex:1}
+.intro-kicker{font:600 11px/1.4 'Noto Serif SC',serif;letter-spacing:.4em;color:#e8c874;opacity:.85;white-space:nowrap}
+.intro-title{
+  font:700 38px/1 'Noto Serif SC',serif;letter-spacing:.55em;color:#f5e8d2;
+  text-shadow:0 2px 14px rgba(0,0,0,.6);
+  margin:0;
+  white-space:nowrap;
+  padding-left:.55em;
+}
+.intro-subtitle{
+  font:400 12px/1.7 'Noto Serif SC',serif;letter-spacing:.18em;
+  color:rgba(245,232,210,.7);max-width:480px;margin-top:8px;
+}
+.intro-header-right{display:flex;flex-direction:column;align-items:flex-end;gap:10px;flex-shrink:0}
+.intro-header-right .primary-btn{padding:14px 32px;font-size:14px;letter-spacing:.3em}
+
+/* 卷轴横向时间轴 */
+.volume-rail{
+  position:relative;display:flex;align-items:center;
+  margin:0 0 18px;flex-shrink:0;
+  padding:14px 0 18px;
+  border-top:1px solid rgba(232,200,116,.18);
+  border-bottom:1px solid rgba(232,200,116,.18);
+  background:linear-gradient(90deg,rgba(245,232,210,.02),rgba(245,232,210,.06) 50%,rgba(245,232,210,.02));
+}
+.volume-rail::before{
+  content:'';position:absolute;left:0;right:0;top:50%;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(232,200,116,.35) 20%,rgba(232,200,116,.35) 80%,transparent);
+}
+.volume-node{
+  flex:1;position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;
+  cursor:pointer;padding:0 6px;
+}
+.volume-node-dot{
+  width:10px;height:10px;border-radius:50%;
+  background:#0a0e0c;border:1.5px solid var(--accent, rgba(232,200,116,.5));
+  position:relative;z-index:2;transition:all .3s;
+}
+.volume-node-name{
+  font:600 12px/1 'Noto Serif SC',serif;letter-spacing:.2em;color:rgba(245,232,210,.85);
+  margin-top:6px;
+}
+.volume-node-en{
+  font:500 8px/1 system-ui,serif;letter-spacing:.12em;color:rgba(232,200,116,.5);
+  margin-top:3px;text-transform:uppercase;
+}
+.volume-node-tag{
+  position:absolute;top:-26px;left:50%;transform:translateX(-50%);
+  font:600 9px/1 system-ui,serif;letter-spacing:.2em;color:rgba(232,200,116,.55);
+  white-space:nowrap;
+}
+.volume-node:hover .volume-node-dot{background:var(--accent, #e8c874);box-shadow:0 0 14px var(--accent, rgba(232,200,116,.6))}
+.volume-node:hover .volume-node-name{color:var(--accent, #e8c874)}
+
+/* 节气长卷：手卷样式 */
+.scroll-scroll{
+  flex:1;min-height:0;
+  position:relative;
+  background:
+    linear-gradient(to right, rgba(8,10,8,.6) 0%, transparent 2%, transparent 98%, rgba(8,10,8,.6) 100%),
+    linear-gradient(to bottom, rgba(245,232,210,.04), rgba(245,232,210,.02));
+  border-left:2px solid rgba(232,200,116,.22);
+  border-right:2px solid rgba(232,200,116,.22);
+  padding:14px 22px 8px;
+  display:flex;flex-direction:column;
+  overflow:hidden;
+  scrollbar-width:thin;scrollbar-color:rgba(232,200,116,.3) transparent;
+}
+.scroll-scroll::-webkit-scrollbar{height:6px}
+.scroll-scroll::-webkit-scrollbar-thumb{background:rgba(232,200,116,.3);border-radius:3px}
+.scroll-scroll::before,.scroll-scroll::after{
+  content:'';position:absolute;top:0;bottom:0;width:18px;
+  background:linear-gradient(to right,rgba(232,200,116,.12),transparent);
+  pointer-events:none;
+}
+.scroll-scroll::before{left:0}
+.scroll-scroll::after{right:0;transform:scaleX(-1)}
+
+.scroll-track{
+  display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:12px;
+  align-content:start;
+  overflow-x:hidden;overflow-y:auto;
+  scrollbar-width:thin;scrollbar-color:rgba(232,200,116,.3) transparent;
+  padding:4px 4px 18px;
+  flex:1;min-height:0;
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-y;
+}
+.scroll-track::-webkit-scrollbar{height:6px}
+.scroll-track::-webkit-scrollbar-thumb{background:rgba(232,200,116,.3);border-radius:3px}
+@media (max-width:1400px){.scroll-track{grid-template-columns:repeat(7,minmax(0,1fr))}}
+@media (max-width:1100px){.scroll-track{grid-template-columns:repeat(6,minmax(0,1fr))}}
+@media (max-width:820px){.scroll-track{grid-template-columns:repeat(5,minmax(0,1fr))}}
+
+/* 主体：内部 = 中段（图+题签竖排） + 底注脚 */
+.scroll-card{
+  position:relative;
+  background:rgba(20,28,23,.55);
+  border:1px solid rgba(232,200,116,.18);
+  border-radius:2px;overflow:hidden;cursor:pointer;
+  transition:transform .35s ease, border-color .35s ease, box-shadow .35s ease;
+  backdrop-filter:blur(2px);
+  isolation:isolate;
+  display:flex;flex-direction:column;
+  min-height:280px;
+}
+.scroll-card:hover{
+  transform:translateY(-3px);
+  border-color:rgba(232,200,116,.7);
+  box-shadow:0 8px 24px -8px rgba(0,0,0,.7),0 0 0 1px rgba(232,200,116,.4) inset;
+  z-index:4;
+}
+/* 顶部：候次小印 + 拼音 */
+.scroll-card-head{
+  display:flex;align-items:flex-start;justify-content:space-between;
+  padding:8px 10px 6px;
+  border-bottom:1px solid rgba(232,200,116,.18);
+  background:linear-gradient(to bottom,rgba(232,200,116,.06),transparent);
+}
+.scroll-card-no{
+  font:600 9px/1 'Noto Serif SC',serif;letter-spacing:.18em;
+  color:rgba(245,232,210,.65);
+  display:inline-flex;align-items:center;gap:5px;
+}
+.scroll-card-no::before{content:'';display:inline-block;width:14px;height:1px;background:#e8c874}
+.scroll-card-pinyin{
+  font:500 8px/1 system-ui,serif;letter-spacing:.1em;color:rgba(232,200,116,.55);
+  text-transform:uppercase;
+}
+/* 中段：人物图 + 竖排题签 并排 */
+.scroll-card-mid{
+  display:flex;flex-direction:row;flex:1;align-items:stretch;
+  min-height:200px;
+}
+.scroll-card-img{
+  position:relative;flex:1;min-width:0;min-height:180px;overflow:hidden;
+  background:linear-gradient(135deg,#1a2420,#0a0e0c);
+}
+.scroll-card-img img{
+  width:100%;height:100%;object-fit:cover;display:block;
+  transition:transform .6s ease;
+  filter:saturate(.9) brightness(.95);
+}
+.scroll-card:hover .scroll-card-img img{transform:scale(1.06);filter:saturate(1.05) brightness(1)}
+.scroll-card-img::after{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(to bottom,transparent 50%,rgba(8,10,8,.5));
+  pointer-events:none;
+}
+/* 右侧：竖排节气名（核心视觉） */
+.scroll-card-name{
+  font:700 30px/1.6 'STKaiti','KaiTi','楷体','Noto Serif SC',serif;
+  color:#f5e8d2;
+  writing-mode:vertical-rl;text-orientation:upright;
+  padding:18px 8px;
+  background:
+    linear-gradient(to right,rgba(232,200,116,.02),rgba(232,200,116,.10) 30%,rgba(232,200,116,.10) 70%,rgba(232,200,116,.02));
+  border-left:1px solid rgba(232,200,116,.25);
+  display:flex;align-items:flex-start;justify-content:center;
+  min-width:46px;
+  min-height:200px;
+  flex-shrink:0;
+  align-self:stretch;
+  position:relative;
+}
+.scroll-card-name::before{
+  content:'';position:absolute;top:8px;left:50%;transform:translateX(-50%);
+  width:1px;height:14px;background:rgba(232,200,116,.4);
+}
+.scroll-card-name::after{
+  content:'';position:absolute;bottom:8px;left:50%;transform:translateX(-50%);
+  width:1px;height:14px;background:rgba(232,200,116,.4);
+}
+/* 竖排下的每个字 */
+.scroll-card-name-char > span{
+  display:block;
+  line-height:1.4;
+  margin:6px 0;
+  writing-mode:horizontal-tb;
+}
+/* 卡片右下小角注 */
+.scroll-card-meta{
+  display:flex;flex-direction:column;gap:3px;
+  padding:6px 10px 8px;
+  background:rgba(8,10,8,.5);
+  border-top:1px solid rgba(232,200,116,.12);
+}
+.scroll-card-month{
+  font:500 9px/1.4 system-ui,serif;letter-spacing:.18em;
+  color:rgba(232,200,116,.7);
+}
+.scroll-card-tag{
+  font:500 8.5px/1.4 system-ui,serif;letter-spacing:.18em;
+  color:rgba(245,232,210,.55);
+}
+/* 完成后朱印 */
+.scroll-card-seal{
+  position:absolute;top:6px;right:6px;z-index:3;
+  width:30px;height:30px;border-radius:2px;
+  background:rgba(168,50,40,.9);color:#f5e8d2;
+  font:700 9px/1.05 'Noto Serif SC',serif;
+  display:flex;align-items:center;justify-content:center;text-align:center;
+  writing-mode:vertical-rl;text-orientation:upright;
+  letter-spacing:.05em;
+  transform:rotate(-4deg);
+  box-shadow:0 2px 6px rgba(0,0,0,.55);
+  opacity:0;transition:opacity .35s ease;
+  padding:2px;
+}
+.scroll-card.completed .scroll-card-seal{opacity:1}
+.scroll-card.completed{border-color:rgba(168,50,40,.55)}
+
+/* 卷分隔：每 4 节气之间插入卷标记 */
+.volume-marker{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-90deg);
+  font:600 11px/1 'Noto Serif SC',serif;letter-spacing:.4em;
+  color:rgba(232,200,116,.45);white-space:nowrap;pointer-events:none;
+}
+
+/* 卷分隔条 */
+.volume-sep{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:10px;padding:14px 4px;
+  background:linear-gradient(180deg,transparent,rgba(232,200,116,.10),transparent);
+  border-left:1px dashed rgba(232,200,116,.35);
+  border-right:1px dashed rgba(232,200,116,.25);
+  position:relative;min-height:280px;
+}
+.volume-sep-label{font:700 18px/1 'Noto Serif SC',serif;letter-spacing:.4em;color:#e8c874}
+.volume-sep-en{font:500 8px/1.2 system-ui,serif;letter-spacing:.18em;color:rgba(232,200,116,.6);text-transform:uppercase;text-align:center}
+.volume-sep-line{width:1px;height:24px;background:linear-gradient(to bottom,transparent,rgba(232,200,116,.5),transparent)}
+
+/* 滚动提示 */
+.scroll-hint{
+  position:relative;bottom:auto;left:auto;transform:none;
+  font:500 10px/1 system-ui,serif;letter-spacing:.4em;
+  color:rgba(232,200,116,.45);
+  display:flex;align-items:center;gap:8px;justify-content:center;
+  padding:8px 0 4px;flex-shrink:0;
+}
+.scroll-hint::before,.scroll-hint::after{content:'';width:14px;height:1px;background:rgba(232,200,116,.35)}
+
+/* 底部信息条 */
+.intro-footer{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-top:14px;flex-shrink:0;
+  font:500 10px/1.4 'Noto Serif SC',serif;letter-spacing:.3em;
+  color:rgba(245,232,210,.5);
+}
+.intro-footer .archive-code{margin:0}
+
+/* =========== 卷首过场 =========== */
+.volume-scene{background:#0a0e0c;z-index:85}
+.volume-kv{position:absolute;inset:0;object-fit:cover;z-index:-3}
+.volume-shade{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(4,6,5,.2),rgba(4,6,5,.55) 60%,rgba(4,6,5,.95));z-index:-2}
+.volume-title{
+  position:absolute;left:32px;right:32px;top:35%;z-index:5;text-align:left;
+  color:#f5e8d2;
+}
+.volume-name{
+  font:600 56px/1 "Songti SC",serif;letter-spacing:.4em;
+  text-shadow:0 2px 18px rgba(0,0,0,.7);
+  opacity:0;
+  padding-left:.4em;
+}
+.volume-en{
+  margin-top:14px;
+  font:600 11px/1.2 system-ui,sans-serif;letter-spacing:.4em;color:rgba(245,232,210,.7);
+  opacity:0;
+}
+.volume-seal{
+  display:inline-block;border:2px solid var(--cinnabar);color:var(--cinnabar);
+  font:600 9px/1 system-ui,sans-serif;letter-spacing:.2em;padding:5px 8px;
+  border-radius:2px;margin-top:24px;writing-mode:vertical-rl;
+  opacity:0;
+}
+.volume-quote{
+  position:absolute;left:32px;right:32px;top:55%;z-index:5;
+  font:13px/1.8 "Songti SC",serif;letter-spacing:.3em;color:rgba(245,232,210,.7);
+  text-shadow:0 1px 6px rgba(0,0,0,.7);opacity:0;
+}
+.volume-tap-hint{
+  position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 30px);transform:translateX(-50%);
+  z-index:6;color:rgba(245,232,210,.5);font:600 9px/1.4 system-ui,sans-serif;letter-spacing:.4em;
+  opacity:0;animation:breathe 2s ease-in-out infinite;
+}
+@keyframes breathe{0%,100%{opacity:.3}50%{opacity:.9}}
+
+/* =========== 序章：卷轴展开 =========== */
+.archive-scene{background:#111512}
+.scroll-axis-left,.scroll-axis-right{
+  position:absolute;top:8%;bottom:8%;width:28px;z-index:5;
+  background:linear-gradient(90deg,#3a2a1a,#5a3a22);border:1px solid rgba(176,125,58,.5);
+  box-shadow:0 4px 14px rgba(0,0,0,.4);
+}
+.scroll-axis-left{left:18px;border-radius:14px 4px 4px 14px}
+.scroll-axis-right{right:18px;border-radius:4px 14px 14px 4px}
+.scroll-paper{
+  position:absolute;top:12%;left:50px;right:50px;bottom:12%;
+  background:var(--paper-f);
+  background-image:
+    radial-gradient(ellipse at top left,rgba(43,29,18,.08),transparent 40%),
+    radial-gradient(ellipse at bottom right,rgba(43,29,18,.06),transparent 50%),
+    url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.65' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .4 0 0 0 0 .32 0 0 0 0 .2 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  box-shadow:inset 0 0 30px rgba(43,29,18,.15),0 6px 30px rgba(0,0,0,.5);
+  z-index:3;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:5vh 7vw;
+  transform-origin:center center;
+  overflow:hidden;
+}
+.scroll-paper.closed{transform:scaleY(0)}
+.scroll-paper .kicker{color:var(--cinnabar);font:600 10px/1.4 system-ui,sans-serif;letter-spacing:.4em;margin-bottom:14px}
+.scroll-paper .main-title{font-size:30px;letter-spacing:.6em;font-weight:500;color:#1a1410;margin-bottom:6px;padding-left:.6em}
+.scroll-paper .en{font:10px/1.4 system-ui,sans-serif;letter-spacing:.4em;color:rgba(43,29,18,.4);margin-bottom:18px}
+.scroll-paper .quote{
+  margin:8px 0;font-size:14px;line-height:1.9;letter-spacing:.15em;color:#3a2a1a;
+  font-style:normal;text-align:center;
+}
+.scroll-paper .quote::before,.scroll-paper .quote::after{
+  content:"";display:inline-block;width:24px;height:1px;background:var(--cinnabar);
+  vertical-align:middle;margin:0 14px;opacity:.5;
+}
+.scroll-paper .desc{
+  font-size:11px;line-height:1.9;letter-spacing:.1em;color:#5a463a;
+  text-align:justify;margin-top:14px;text-indent:2em;
+}
+.scroll-paper .seal{
+  display:inline-block;border:2px solid var(--cinnabar);color:var(--cinnabar);
+  font:600 9px/1 system-ui,sans-serif;letter-spacing:.2em;padding:5px 8px;
+  border-radius:2px;margin-top:18px;writing-mode:vertical-rl;
+}
+.scroll-paper .scroll-cta{
+  display:block;margin:18px auto 0;
+  padding:.7em 1.4em;background:var(--cinnabar);color:#f5e8d2;
+  border:none;font:600 11px/1 system-ui,sans-serif;letter-spacing:.3em;
+  border-radius:2px;cursor:pointer;opacity:0;
+  box-shadow:0 4px 14px rgba(176,60,40,.35);
+  transition:transform .2s ease, box-shadow .2s ease;
+}
+.scroll-paper .scroll-cta:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(176,60,40,.5)}
+.scroll-paper .scroll-cta:active{transform:translateY(0)}
+.scroll-axis-left{transform:translateX(-12px);opacity:0}
+.scroll-axis-right{transform:translateX(12px);opacity:0}
+
+/* =========== 序章后：主仪式 =========== */
+.ritual-scene{background:#0a0e0c}
+.sage{
+  position:absolute;left:50%;bottom:8%;transform:translateX(-50%);
+  height:54%;filter:drop-shadow(0 6px 18px rgba(0,0,0,.45));z-index:6;
+  animation:sway 4.5s ease-in-out infinite;
+}
+.sage.idle{animation:sway 4.5s ease-in-out infinite}
+.sage.pouring{animation:sway 1.4s ease-in-out infinite}
+.sage.celebrate{animation:sage-bow 1.4s ease-in-out 1}
+@keyframes sway{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(-3px)}}
+@keyframes sage-bow{
+  0%{transform:translateX(-50%) rotate(0)}
+  50%{transform:translateX(-50%) rotate(-3deg) translateY(8px)}
+  100%{transform:translateX(-50%) rotate(0)}
+}
+
+/* 通用仪式对象：bowl/vessel */
+.vessel{
+  position:absolute;bottom:24%;right:12%;width:30%;z-index:30;
+  filter:drop-shadow(0 6px 14px rgba(0,0,0,.5));cursor:pointer;
+  transition:transform var(--t),filter var(--t);
+  touch-action:none;
+}
+.vessel:hover{transform:scale(1.05)}
+.vessel:active{transform:scale(.97)}
+.vessel.pouring{animation:pour-shake 0.3s ease-in-out 7}
+@keyframes pour-shake{0%,100%{transform:rotate(0)}50%{transform:rotate(-2deg)}}
+.vessel.done{filter:drop-shadow(0 0 18px rgba(232,200,116,.7))}
+
+/* 蒸汽 */
+.steam-stack{position:absolute;bottom:30%;right:18%;width:90px;height:180px;z-index:8;pointer-events:none}
+.steam-puff{
+  position:absolute;bottom:0;left:50%;transform:translateX(-50%);
+  width:50px;height:80px;
+  background:radial-gradient(ellipse at center top,rgba(245,232,210,.5),transparent 70%);
+  filter:blur(6px);opacity:0;
+}
+.steam-puff.show{animation:steam-rise 2.5s ease-out forwards}
+@keyframes steam-rise{
+  0%{opacity:0;transform:translateX(-50%) translateY(20px) scale(.6)}
+  30%{opacity:.9}
+  100%{opacity:0;transform:translateX(-50%) translateY(-80px) scale(1.6)}
+}
+.steam-residue{
+  position:absolute;left:0;right:0;top:0;bottom:0;
+  background:radial-gradient(ellipse at 50% 80%,rgba(245,232,210,.12),transparent 50%);
+  opacity:0;transition:opacity .6s;pointer-events:none;
+}
+.steam-residue.show{opacity:1}
+
+.water-mark{
+  position:absolute;bottom:24%;right:8%;width:34%;aspect-ratio:1/1;
+  border-radius:50%;border:1px solid rgba(232,200,116,.0);
+  pointer-events:none;z-index:5;opacity:0;
+}
+.water-mark.show{animation:water-expand 1.4s ease-out forwards}
+@keyframes water-expand{
+  0%{opacity:0;transform:scale(.4);border-color:rgba(232,200,116,.4)}
+  40%{opacity:.8;border-color:rgba(232,200,116,.6)}
+  100%{opacity:0;transform:scale(1.5);border-color:rgba(232,200,116,0)}
+}
+
+.ink-text{
+  position:absolute;bottom:42%;left:50%;transform:translateX(-50%);
+  font-size:36px;font-weight:500;color:var(--ink);letter-spacing:.4em;
+  font-family:"Songti SC",serif;text-shadow:0 0 12px rgba(245,232,210,.9);
+  z-index:9;opacity:0;padding-left:.4em;
+}
+.ink-text.show{opacity:1;animation:ink-appear 1.8s ease-out forwards}
+@keyframes ink-appear{
+  0%{opacity:0;transform:translate(-50%,10px) scale(.6);filter:blur(8px)}
+  50%{opacity:.9;transform:translate(-50%,0) scale(1.05);filter:blur(0)}
+  100%{opacity:1;transform:translate(-50%,-4px) scale(1);filter:blur(0)}
+}
+
+.ritual-subtitle{
+  position:absolute;left:0;right:0;top:38%;
+  text-align:center;z-index:45;pointer-events:none;
+  font-size:11px;letter-spacing:.4em;color:rgba(245,232,210,.7);
+  font-family:"Songti SC",serif;
+  opacity:0;transition:opacity 1.2s ease;
+}
+.ritual-subtitle.show{opacity:1}
+
+.task-hint{
+  position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 12px);transform:translateX(-50%);
+  z-index:60;color:rgba(245,232,210,.85);font:11px/1.4 system-ui,sans-serif;letter-spacing:.3em;
+  background:rgba(13,18,15,.55);padding:.55em 1em;border-radius:2px;
+  border:1px solid rgba(245,232,210,.15);backdrop-filter:blur(8px);
+  pointer-events:none;text-align:center;white-space:nowrap;
+  max-width:90%;
+  transition:all .4s;
+}
+.task-hint .key{display:inline-block;padding:1px 6px;border:1px solid rgba(245,232,210,.4);border-radius:2px;margin:0 4px;font-size:10px}
+.task-hint.tip-light{color:#e8c874;border-color:rgba(232,200,116,.5)}
+.task-hint.tip-red{color:#e8a89a;border-color:rgba(232,168,154,.5)}
+
+.pour-progress{
+  position:absolute;left:50%;bottom:25%;transform:translateX(-50%);
+  width:60px;height:60px;z-index:50;display:none;pointer-events:none;
+}
+.pour-progress.show{display:block}
+.pour-progress svg{width:100%;height:100%;transform:rotate(-90deg)}
+.pour-progress circle{fill:none;stroke-width:4;stroke-linecap:round;pointer-events:none}
+.pour-progress .track{stroke:rgba(245,232,210,.18)}
+.pour-progress .fill{stroke:#e8c874;stroke-dasharray:176;stroke-dashoffset:176;transition:stroke-dashoffset 1.2s linear}
+
+.pour-counter{
+  position:absolute;left:50%;bottom:33%;transform:translateX(-50%);
+  z-index:50;display:none;text-align:center;pointer-events:none;
+}
+.pour-counter.show{display:block}
+.pour-counter .num{
+  font:500 36px/1 "Songti SC",serif;color:#e8c874;
+  text-shadow:0 0 12px rgba(232,200,116,.6);
+}
+.pour-counter .lbl{font:600 9px/1.4 system-ui,sans-serif;letter-spacing:.4em;color:rgba(245,232,210,.7);margin-top:6px}
+.pour-counter .num.bump{animation:bump .35s ease}
+@keyframes bump{0%,100%{transform:scale(1)}50%{transform:scale(1.4)}}
+
+.beat-progress{
+  position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 60px);transform:translateX(-50%);
+  display:none;gap:5px;z-index:50;flex-wrap:wrap;justify-content:center;max-width:60%;
+}
+.beat-progress.show{display:flex}
+.beat-dot{
+  width:9px;height:9px;border-radius:50%;
+  background:rgba(245,232,210,.2);border:1px solid rgba(245,232,210,.3);
+  transition:all .3s ease;
+}
+.beat-dot.done{background:#e8c874;border-color:#e8c874;box-shadow:0 0 8px rgba(232,200,116,.6);transform:scale(1.15)}
+
+.beat-zone{
+  position:absolute;bottom:20%;right:6%;width:60%;height:46%;z-index:10;
+  cursor:pointer;
+}
+.beat-zone-hint{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  color:rgba(232,200,116,.7);font:11px/1.4 system-ui,sans-serif;letter-spacing:.3em;
+  background:rgba(13,18,15,.4);padding:.4em .9em;border-radius:999px;
+  border:1px dashed rgba(232,200,116,.4);
+  pointer-events:none;opacity:0;transition:opacity .3s;
+}
+.beat-zone.active:hover .beat-zone-hint{opacity:1}
+
+.beat-counter{
+  position:absolute;left:50%;top:38%;transform:translateX(-50%);
+  z-index:50;display:none;text-align:center;
+}
+.beat-counter.show{display:block}
+.beat-counter .num{
+  font:500 30px/1 "Songti SC",serif;color:#e8c874;
+  text-shadow:0 0 10px rgba(232,200,116,.5);
+}
+.beat-counter .lbl{font:600 9px/1.4 system-ui,sans-serif;letter-spacing:.4em;color:rgba(245,232,210,.7);margin-top:4px}
+
+/* =========== 动态仪式层（由 JS 注入） =========== */
+#dynamicLayer{
+  position:absolute;inset:0;z-index:8;
+  pointer-events:none;
+  overflow:hidden;
+}
+#dynamicLayer > *{pointer-events:auto}
+
+/* --- 通用 --- */
+.brush-tool{position:absolute;bottom:20%;right:15%;width:28%;z-index:9;opacity:.85}
+.brush-canvas,.write-canvas,.paint-canvas{position:absolute;inset:0;width:100%;height:100%;z-index:7;pointer-events:none}
+
+/* 所有仪式子舞台都禁用浏览器默认手势 */
+.drum-stage,.kite-stage,.hairpin-stage,.pour-stage,.rain-stage,.cicada-stage,
+.page-stage,.firefly-stage,.scale-stage,.lantern-stage,.goose-stage,
+.moon-stage,.climb-stage,.wine-stage,.fireplace-stage,.plum-stage,.crane-stage,
+.tea-select-stage,#dynamicLayer,#ritualScene,#vessel,#beatZone{touch-action:none}
+
+/* --- 击鼓 --- */
+.drum-stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:8}
+.drum-stage::before{content:'';position:absolute;inset:0;border:2px solid rgba(232,200,116,.2);border-radius:4px;pointer-events:none}
+.drum-stage.hit{animation:drum-hit .15s ease}
+@keyframes drum-hit{0%,100%{transform:scale(1)}50%{transform:scale(.97)}}
+.drum-dot{width:12px;height:12px;border-radius:50%;background:rgba(245,232,210,.15);border:1.5px solid rgba(245,232,210,.35);margin:0 3px;transition:all .3s}
+.drum-dot.on{background:#e8c874;border-color:#e8c874;box-shadow:0 0 10px rgba(232,200,116,.7)}
+.thunder-flash{position:absolute;inset:0;background:rgba(240,240,200,.0);pointer-events:none;z-index:9}
+.thunder-flash.flash{animation:thunder-flash .3s ease}
+.thunder-flash.big{animation:thunder-big 1s ease;background:rgba(240,240,200,.15)}
+@keyframes thunder-flash{0%,100%{background:rgba(240,240,200,0)}50%{background:rgba(240,240,200,.2)}}
+@keyframes thunder-big{0%{background:rgba(240,240,200,.3)}100%{background:rgba(240,240,200,0)}}
+
+/* --- 放鸢 --- */
+.kite-stage{position:absolute;inset:0;z-index:8}
+.kite-img{position:absolute;bottom:10%;left:50%;transform:translateX(-50%);width:30%;transition:bottom .4s ease,bottom .4s ease;filter:drop-shadow(0 4px 12px rgba(0,0,0,.5))}
+.kite-line{position:absolute;bottom:calc(10% + 80px);left:50%;width:1px;height:0%;background:rgba(232,200,116,.4);transition:height .4s ease;transform-origin:top center}
+.kite-hint{position:absolute;bottom:5%;left:50%;transform:translateX(-50%);font:11px/1.4 system-ui,serif;letter-spacing:.3em;color:rgba(232,200,116,.7)}
+
+/* --- 焚香 --- */
+.incense-stage{position:absolute;inset:0;z-index:8}
+.incense-stick{position:absolute;bottom:22%;right:18%;width:6%;aspect-ratio:1/18;background:linear-gradient(to top,#8B6914,#C8A030,#D4B050);border-radius:2px;z-index:9}
+.incense-ember{position:absolute;bottom:22%;right:calc(18% + 3%);width:12px;height:12px;border-radius:50%;background:rgba(40,20,10,.8);z-index:10;transition:all .4s;opacity:0}
+.incense-ember.lit{opacity:1;background:#ff6020;box-shadow:0 0 16px rgba(255,80,20,.8),0 0 6px rgba(255,160,60,.6);animation:ember-pulse 0.8s ease-in-out infinite}
+.incense-ember.full{background:#ff4010;box-shadow:0 0 24px rgba(255,60,10,.9),0 0 8px rgba(255,180,60,.7)}
+@keyframes ember-pulse{0%,100%{box-shadow:0 0 16px rgba(255,80,20,.8)}50%{box-shadow:0 0 22px rgba(255,120,40,.9)}}
+.smoke-layer{position:absolute;inset:0;z-index:6;pointer-events:none;overflow:hidden}
+.smoke-puff{position:absolute;bottom:24%;width:40px;height:60px;background:radial-gradient(ellipse at 50% 100%,rgba(220,210,190,.6),transparent 70%);filter:blur(5px);animation:smoke-rise 4s ease-out forwards;pointer-events:none}
+@keyframes smoke-rise{0%{opacity:0;transform:translateY(0) scale(.5)}20%{opacity:.8}100%{opacity:0;transform:translateY(-200px) scale(2)}}
+.willow-flake{position:absolute;top:-10px;width:6px;height:6px;background:#8BC34A;border-radius:50% 0 50% 50%;animation:willow-fall linear forwards;pointer-events:none}
+@keyframes willow-fall{0%{transform:translateY(0) rotate(0deg);opacity:.8}100%{transform:translateY(120vh) rotate(360deg);opacity:0}}
+
+/* --- 煎茶选花 --- */
+.tea-select-stage{position:absolute;inset:0;z-index:8;display:flex;align-items:flex-end;justify-content:flex-end;padding:0 12% 22%}
+.tea-pot{width:30%;aspect-ratio:1/1.2;background:linear-gradient(135deg,#5a7a60,#3a5a40);border-radius:0 0 40% 40%;position:relative;cursor:pointer;transition:transform .3s;box-shadow:0 4px 16px rgba(0,0,0,.5)}
+.tea-pot:hover{transform:scale(1.05) rotate(-3deg)}
+.tea-pot.pouring{animation:pour-tilt 1s ease-in-out infinite;transform-origin:top center}
+.tea-pot.done{opacity:.6}
+@keyframes pour-tilt{0%,100%{transform:rotate(-2deg)}50%{transform:rotate(-8deg)}}
+.tea-water{position:absolute;bottom:0;left:0;right:0;height:0;background:linear-gradient(to top,#8B6914,rgba(100,70,20,.6));transition:height .8s ease;overflow:hidden}
+.tea-water.full{height:70%}
+.flower-tray{position:absolute;top:20%;left:10%;right:10%;display:flex;justify-content:space-around;pointer-events:auto}
+.flower-pick{width:50px;height:50px;cursor:pointer;transition:transform .3s;filter:drop-shadow(0 2px 6px rgba(0,0,0,.4))}
+.flower-pick:hover{transform:scale(1.15) rotate(-5deg)}
+.flower-pick.picked{opacity:.4;transform:scale(.9)}
+.flower-fly{position:absolute;width:40px;height:40px;animation:fly-to-pot 1s ease-in forwards;pointer-events:none;z-index:20}
+@keyframes fly-to-pot{0%{transform:scale(1);opacity:1}100%{transform:translateX(200px) translateY(200px) scale(.3);opacity:0}}
+
+/* --- 簪花 --- */
+.hairpin-stage{position:absolute;inset:0;z-index:8}
+.hair-canvas{position:absolute;top:30%;left:50%;transform:translateX(-50%);width:60%;height:40%}
+.hair-dot{position:absolute;width:18px;height:18px;border-radius:50%;background:rgba(232,200,116,.1);border:1.5px solid rgba(232,200,116,.3);cursor:pointer;transition:all .3s}
+.hair-dot:hover{background:rgba(232,200,116,.3);transform:scale(1.2)}
+.hair-flower{position:absolute;width:48px;height:48px;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5));animation:hairpin-appear .4s ease-out;z-index:10}
+
+/* --- 灌浆 --- */
+.pour-stage{position:absolute;inset:0;z-index:8;display:flex;align-items:flex-end;justify-content:center;padding:0 0 18%}
+.pour-pot{width:25%;aspect-ratio:1/1.5;background:linear-gradient(135deg,#8B6914,#5a4010);border-radius:8px 8px 40% 40%;cursor:pointer;transition:transform .3s;transform-origin:top center}
+.pour-pot:hover{transform:scale(1.05)}
+.pour-pot.tilting{transform:rotate(-15deg)}
+.pour-pot.done{opacity:.5;transform:none}
+.pour-stream{position:absolute;top:-60%;left:50%;width:8px;height:0;background:linear-gradient(to bottom,#8B6914,#5a4010);border-radius:0 0 4px 4px;transition:height .3s ease;transform:translateX(-50%)}
+.pour-stream.flowing{height:200px;animation:stream-wave 0.5s ease-in-out infinite}
+.pour-stream.done{height:0;opacity:0}
+@keyframes stream-wave{0%,100%{transform:translateX(-50%) skewX(-3deg)}50%{transform:translateX(-50%) skewX(3deg)}}
+.pour-ears{position:absolute;top:15%;left:10%;right:10%;height:60%;display:flex;align-items:flex-end;justify-content:space-around;pointer-events:none}
+.pour-ear{width:8%;height:0%;background:linear-gradient(to top,#C8A030,#8B6914);border-radius:4px 4px 0 0;transition:height .4s ease,filter .4s ease}
+.pour-ear.lit{filter:brightness(1.4) drop-shadow(0 0 6px rgba(200,160,48,.8))}
+.pour-ears.all-lit .pour-ear{height:70%!important;filter:brightness(1.5) drop-shadow(0 0 10px rgba(200,160,48,.9))}
+
+/* --- 听雨 --- */
+.rain-stage{position:absolute;inset:0;z-index:8;overflow:hidden;transition:background .5s ease}
+.rain-stage.level-1{background:linear-gradient(to bottom,rgba(30,50,80,.3),rgba(30,50,80,.5))}
+.rain-stage.level-2{background:linear-gradient(to bottom,rgba(20,40,70,.5),rgba(20,40,70,.7))}
+.rain-stage.level-3{background:linear-gradient(to bottom,rgba(10,30,60,.6),rgba(10,30,60,.8))}
+.rain-stage.level-4{background:linear-gradient(to bottom,rgba(5,20,50,.7),rgba(5,20,50,.9))}
+.rain-drops{position:absolute;inset:0;pointer-events:none;z-index:7}
+.raindrop{position:absolute;top:-20px;width:2px;height:16px;background:linear-gradient(to bottom,transparent,rgba(180,200,255,.7));animation:rain-fall linear forwards;pointer-events:none}
+@keyframes rain-fall{0%{transform:translateY(0);opacity:.7}100%{transform:translateY(110vh);opacity:.2}}
+
+/* --- 听蝉 --- */
+.cicada-stage{position:absolute;inset:0;z-index:8}
+.cicada-icon{position:absolute;top:20%;left:50%;transform:translateX(-50%);font-size:80px;opacity:.15;transition:opacity .3s;line-height:1}
+.cicada-icon.buzz{animation:cicada-buzz .15s ease infinite}
+@keyframes cicada-buzz{0%,100%{transform:translateX(-50%) scale(1)}50%{transform:translateX(-50%) scale(1.05) rotate(2deg)}}
+.note-pop{position:absolute;font:700 28px/1 'Noto Serif SC',serif;color:#e8c874;animation:note-pop-anim .8s ease-out forwards;pointer-events:none;text-shadow:0 0 12px rgba(232,200,116,.8)}
+@keyframes note-pop-anim{0%{transform:scale(.5) translateY(10px);opacity:0}40%{transform:scale(1.2) translateY(-5px);opacity:1}100%{transform:scale(.8) translateY(-20px);opacity:0}}
+
+/* --- 晒书 --- */
+.page-stage{position:absolute;inset:0;z-index:8;display:flex;align-items:center;justify-content:center}
+.page-book{position:relative;width:50%;height:60%;background:rgba(200,170,120,.08);border:1px solid rgba(200,160,80,.2);perspective:600px;transform-style:preserve-3d}
+.page-flip{position:absolute;inset:0;background:rgba(220,190,130,.12);border:1px solid rgba(200,160,80,.3);transform-origin:left center;transition:transform .5s ease;backface-visibility:hidden}
+.page-flip.flipped{transform:rotateY(-110deg)}
+.page-text{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:700 36px/1 'Noto Serif SC',serif;color:rgba(232,200,116,.6);pointer-events:none}
+
+/* --- 萤火 --- */
+.firefly-stage{position:absolute;inset:0;z-index:8}
+.firefly-word{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font:700 80px/1 'Noto Serif SC',serif;color:#e8c874;text-shadow:0 0 30px rgba(232,200,116,.9);opacity:0;transition:opacity .8s ease;pointer-events:none;z-index:12}
+.firefly{position:absolute;width:10px;height:10px;border-radius:50%;background:#e8c874;box-shadow:0 0 12px rgba(232,200,116,.9),0 0 4px rgba(232,200,116,.5);animation:firefly-glow 2s ease-in-out infinite;pointer-events:none;z-index:9}
+@keyframes firefly-glow{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1.2)}}
+.firefly.gathering{transition:left 1.2s ease-in-out,top 1.2s ease-in-out,opacity 1s ease-in-out;animation:firefly-glow 1s ease-in-out 6}
+.firefly.gathering{left:var(--tx)!important;top:var(--ty)!important}
+
+/* --- 悬秤 --- */
+.scale-stage{position:absolute;inset:0;z-index:8;display:flex;align-items:center;justify-content:center}
+.scale-beam{width:60%;height:8px;background:linear-gradient(to right,#8B6914,#C8A030,#8B6914);border-radius:4px;cursor:pointer;position:relative;box-shadow:0 2px 8px rgba(0,0,0,.4);transition:transform .3s ease}
+.scale-beam::before{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:16px;height:16px;border-radius:50%;background:#C8A030;border:2px solid #8B6914}
+.scale-beam.swinging{animation:beam-swing 0.4s ease-in-out infinite;transform-origin:center center}
+@keyframes beam-swing{0%,100%{transform:rotate(var(--swing,0deg))}50%{transform:rotate(calc(var(--swing,0deg) * -1))}}
+.scale-beam.balanced{transform:none}
+.scale-num{position:absolute;top:50%;right:10%;transform:translateY(-50%);font:700 32px/1 'Noto Serif SC',serif;color:#e8c874;text-shadow:0 0 12px rgba(232,200,116,.6)}
+
+/* --- 放河灯 --- */
+.lantern-stage{position:absolute;inset:0;z-index:8}
+.lantern-img{position:absolute;bottom:20%;left:50%;transform:translateX(-50%);width:22%;filter:drop-shadow(0 4px 12px rgba(0,0,0,.5));transition:transform 2s ease}
+.lantern-img.floating{bottom:70%;opacity:.8;transform:translateX(-50%) rotate(8deg)}
+.lantern-glow{position:absolute;bottom:18%;left:calc(50% - 12%);width:24%;aspect-ratio:1;background:radial-gradient(circle,rgba(255,200,80,.0) 40%,rgba(255,180,60,.4) 70%,transparent);border-radius:50%;transition:all .5s ease;pointer-events:none}
+.lantern-glow.filling{background:radial-gradient(circle,rgba(255,200,80,.6) 20%,rgba(255,180,60,.3) 70%,transparent)}
+.lantern-glow.full{background:radial-gradient(circle,rgba(255,220,100,.8) 20%,rgba(255,180,60,.4) 70%,transparent);box-shadow:0 0 30px rgba(255,180,60,.5)}
+.lantern-glow.floating{opacity:0}
+.lantern-water{position:absolute;bottom:0;left:0;right:0;height:30%;background:linear-gradient(to bottom,transparent,rgba(10,20,40,.4));pointer-events:none}
+.water-ripple{position:absolute;top:20%;left:50%;transform:translateX(-50%);width:100px;height:20px;border:1px solid rgba(200,220,255,.4);border-radius:50%;animation:water-expand-ripple 3s ease-out forwards}
+@keyframes water-expand-ripple{0%{opacity:.8;transform:translateX(-50%) scale(.5)}100%{opacity:0;transform:translateX(-50%) scale(4)}}
+
+/* --- 候雁 --- */
+.goose-stage{position:absolute;inset:0;z-index:8}
+.goose{position:absolute;font-size:40px;transition:left .8s ease,top .8s ease,transform .5s ease;opacity:.7;line-height:1;user-select:none;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))}
+.goose.active{opacity:1;text-shadow:0 0 12px rgba(232,200,116,.8)}
+
+/* --- 候月 --- */
+.moon-stage{position:absolute;inset:0;z-index:8;background:linear-gradient(to bottom,rgba(5,10,25,.6),rgba(5,10,25,.9))}
+.moon-disc{position:absolute;top:15%;left:50%;transform:translateX(-50%);width:120px;height:120px;border-radius:50%;background:radial-gradient(circle at 40% 40%,#e8d4a8,#c8b488,#a89868);box-shadow:0 0 30px rgba(232,200,116,.4);cursor:pointer;transition:box-shadow .5s ease;overflow:hidden}
+.moon-disc.glowing{box-shadow:0 0 50px rgba(232,200,116,.7),0 0 20px rgba(255,255,200,.4)}
+.moon-disc.phase-1{background:radial-gradient(circle at 30% 50%,#0a0a0a 30%,#a89868 100%)}
+.moon-disc.phase-2{background:radial-gradient(circle at 20% 50%,#1a1a2a 25%,#a89868 100%)}
+.moon-disc.phase-3{background:radial-gradient(circle at 40% 50%,#1a1a2a 45%,#a89868 100%)}
+.moon-disc.phase-4{background:radial-gradient(circle at 45% 50%,#0a0a0a 20%,#a89868 100%)}
+.moon-disc.phase-4{background:radial-gradient(circle at 50% 50%,#f0e0b0,#e8d4a8)}
+.moon-label{position:absolute;top:8%;left:50%;transform:translateX(-50%);font:700 18px/1 'Noto Serif SC',serif;color:#e8c874;text-shadow:0 0 12px rgba(232,200,116,.8);animation:moon-label-anim 1.5s ease-out forwards}
+@keyframes moon-label-anim{0%{opacity:0;transform:translateX(-50%) translateY(10px)}30%{opacity:1;transform:translateX(-50%) translateY(0)}100%{opacity:0;transform:translateX(-50%) translateY(-10px)}}
+.moon-petal{position:absolute;bottom:0;width:8px;height:8px;border-radius:50% 0 50% 50%;background:#f0d4a4;animation:petal-moon-fall linear forwards;pointer-events:none}
+@keyframes petal-moon-fall{0%{transform:translateY(0) rotate(0deg);opacity:.8}100%{transform:translateY(-80vh) rotate(360deg);opacity:0}}
+
+/* --- 登高 --- */
+.climb-stage{position:absolute;inset:0;z-index:8;background:linear-gradient(to bottom,rgba(30,40,30,.3),rgba(10,20,10,.7));overflow:hidden}
+.climb-path{position:absolute;bottom:10%;left:15%;width:70%;height:70%;cursor:pointer;background:linear-gradient(to top,#2a3a20,#1a2a10);clip-path:polygon(20% 100%,80% 100%,60% 0%,40% 0%)}
+.climb-path::after{content:'▲';position:absolute;bottom:0;left:50%;transform:translateX(-50%);font-size:20px;color:#e8c874}
+.climb-peak{position:absolute;top:0;left:35%;width:30%;opacity:0;transition:opacity .8s ease;background:linear-gradient(to bottom,rgba(255,220,100,.2),transparent);display:flex;align-items:center;justify-content:center;font:700 14px/1 'Noto Serif SC',serif;color:#e8c874;letter-spacing:.3em;padding-top:20px}
+.climb-peak.show{opacity:1}
+.climb-flowers{position:absolute;bottom:10%;left:15%;width:70%;height:60%;pointer-events:none}
+.climb-flower{position:absolute;width:30px;height:30px;object-fit:contain;animation:climb-flower-sway 3s ease-in-out infinite}
+
+/* --- 饮酒 --- */
+.wine-stage{position:absolute;inset:0;z-index:8;display:flex;align-items:flex-end;justify-content:center;padding:0 0 18%}
+.wine-cup{width:22%;filter:drop-shadow(0 4px 12px rgba(0,0,0,.5));transition:transform .5s ease;transform-origin:bottom center}
+.wine-liquid{position:absolute;bottom:0;left:0;right:0;height:0;background:linear-gradient(to top,rgba(120,30,20,.8),rgba(180,60,40,.5));transition:height .8s ease}
+.wine-leaves{position:absolute;inset:0;pointer-events:none;z-index:7}
+.red-leaf{position:absolute;top:-10px;width:14px;height:14px;background:#a82020;border-radius:50% 0 50% 50%;animation:red-leaf-fall linear forwards;pointer-events:none;opacity:.8}
+@keyframes red-leaf-fall{0%{transform:translateY(0) rotate(0deg);opacity:.8}100%{transform:translateY(110vh) rotate(540deg);opacity:.2}}
+
+/* --- 围炉 --- */
+.fireplace-stage{position:absolute;inset:0;z-index:8;display:flex;align-items:flex-end;justify-content:center;padding:0 0 15%}
+.fire-glow{position:absolute;bottom:15%;left:50%;transform:translateX(-50%);width:200px;height:200px;background:radial-gradient(circle,rgba(255,100,20,.6) 20%,rgba(255,60,10,.3) 60%,transparent);border-radius:50%;transition:opacity .3s;animation:fire-base 1s ease-in-out infinite;pointer-events:none}
+.fire-glow.puff{animation:fire-puff .6s ease-out}
+@keyframes fire-base{0%,100%{opacity:.7;transform:translateX(-50%) scale(1)}50%{opacity:.9;transform:translateX(-50%) scale(1.05)}}
+@keyframes fire-puff{0%{opacity:1;transform:translateX(-50%) scale(1.3)}100%{opacity:.8;transform:translateX(-50%) scale(1)}}
+.fire-chestnuts{position:absolute;bottom:18%;left:50%;transform:translateX(-50%);width:160px;display:flex;flex-wrap:wrap;pointer-events:none}
+.chestnut{width:28px;height:24px;background:linear-gradient(135deg,#8B4513,#5a2d0a);border-radius:50% 50% 50% 50%;transition:filter .3s,transform .3s}
+.chestnut.roasted{filter:brightness(1.3) sepia(.3);transform:scale(1.1)}
+
+/* --- 折梅 --- */
+.plum-stage{position:absolute;inset:0;z-index:8;display:flex;align-items:center;justify-content:center}
+.plum-branch{width:55%;filter:drop-shadow(0 4px 12px rgba(0,0,0,.4));position:absolute;top:15%}
+.plum-vase{position:absolute;bottom:18%;left:50%;transform:translateX(-50%);width:18%;aspect-ratio:1/1.2;background:linear-gradient(135deg,#3a5a40,#2a3a28);border-radius:20% 20% 50% 50%;box-shadow:0 4px 12px rgba(0,0,0,.5)}
+.plum-spot{position:absolute;width:24px;height:24px;border-radius:50%;border:1.5px dashed rgba(232,200,116,.4);cursor:pointer;transition:all .3s;transform:translate(-50%,-50%)}
+.plum-spot:hover{background:rgba(232,200,116,.2);transform:translate(-50%,-50%) scale(1.3)}
+.plum-spot.lit{background:rgba(168,50,40,.8);border-color:rgba(168,50,40,.8);box-shadow:0 0 10px rgba(168,50,40,.6)}
+.plum-snow{position:absolute;inset:0;pointer-events:none;z-index:9}
+.snow-flake{position:absolute;top:-10px;width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.7);animation:snow-fall linear forwards;pointer-events:none}
+@keyframes snow-fall{0%{transform:translateY(0) rotate(0deg);opacity:.8}100%{transform:translateY(100vh) rotate(360deg);opacity:.3}}
+
+/* --- 观鹤 --- */
+.crane-stage{position:absolute;inset:0;z-index:8}
+.crane{position:absolute;font-size:52px;transition:left .8s ease,top .8s ease,transform .5s ease;opacity:.7;line-height:1;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))}
+.crane.active{opacity:1;text-shadow:0 0 14px rgba(232,200,116,.8)}
+
+/* --- 写九 / 画梅 --- */
+.write-stage,.paint-stage{position:absolute;inset:0;z-index:8;pointer-events:auto;touch-action:none}
+.write-canvas,.paint-canvas{pointer-events:none}
+.sunrise{position:absolute;bottom:0;left:0;right:0;height:40%;background:linear-gradient(to top,rgba(255,100,40,.4),rgba(255,180,80,.2),transparent);animation:sunrise-rise 1.2s ease-out forwards;pointer-events:none}
+@keyframes sunrise-rise{0%{opacity:0;transform:translateY(100%)}100%{opacity:1;transform:translateY(0)}}
+
+/* --- 守岁 --- */
+.countdown-stage{position:absolute;inset:0;z-index:8;background:linear-gradient(to bottom,rgba(5,5,15,.5),rgba(5,5,15,.8))}
+.countdown-clock{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font:700 72px/1 'Songti SC',serif;color:#e8c874;text-shadow:0 0 20px rgba(232,200,116,.8);transition:all .3s}
+.countdown-clock.active{text-shadow:0 0 40px rgba(232,200,116,1)}
+.countdown-clock.done{color:#a82020;text-shadow:0 0 20px rgba(168,50,40,.9);animation:clock-done 0.5s ease}
+@keyframes clock-done{0%,100%{transform:translate(-50%,-50%) scale(1)}50%{transform:translate(-50%,-50%) scale(1.2)}}
+.countdown-lantern{position:absolute;top:20%;left:50%;transform:translateX(-50%);width:80px;filter:drop-shadow(0 4px 12px rgba(0,0,0,.5))}
+.countdown-lantern.lit{filter:drop-shadow(0 0 30px rgba(168,50,40,.9));animation:lantern-glow 1s ease-in-out infinite}
+@keyframes lantern-glow{0%,100%{filter:drop-shadow(0 0 30px rgba(168,50,40,.8))}50%{filter:drop-shadow(0 0 50px rgba(200,60,40,1))}}
+.countdown-light{position:absolute;top:20%;left:calc(50% - 40px);width:80px;height:80px;border-radius:50%;background:radial-gradient(circle,rgba(168,50,40,0) 30%,rgba(168,50,40,.6) 100%);transition:opacity .5s ease}
+.countdown-light.full{background:radial-gradient(circle,rgba(168,50,40,.9) 30%,rgba(200,60,40,.4) 100%)}
+.firework-spark{position:absolute;width:6px;height:6px;border-radius:50%;animation:firework-burst 1.5s ease-out forwards;pointer-events:none}
+@keyframes firework-burst{0%{transform:translate(0,0);opacity:1}100%{transform:translate(var(--tx),var(--ty));opacity:0}}
+
+/* =========== 物候档案 =========== */
+.archive-detail-scene{background:#0a0e0c}
+.archive-sheet{
+  position:absolute;top:8%;left:8%;right:8%;bottom:18%;
+  background:var(--paper-f);
+  background-image:
+    url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.6' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .4 0 0 0 0 .32 0 0 0 0 .2 0 0 0 .08 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  color:#1a1410;
+  padding:5vh 6vw 10vh;overflow-y:auto;
+  box-shadow:inset 0 0 30px rgba(43,29,18,.15);
+  border:1px solid rgba(43,29,18,.15);
+  animation:sheet-in .8s ease-out;
+  -webkit-overflow-scrolling:touch;
+}
+@keyframes sheet-in{
+  from{opacity:0;transform:translateY(20px)}
+  to{opacity:1;transform:translateY(0)}
+}
+.archive-sheet::before{
+  content:"";position:absolute;left:8px;right:8px;top:8px;bottom:8px;
+  border:1px dashed rgba(43,29,18,.25);pointer-events:none;
+}
+.archive-sheet .a-kicker{
+  color:var(--cinnabar);font:600 10px/1.4 system-ui,sans-serif;
+  letter-spacing:.4em;text-align:center;margin-bottom:14px;
+}
+.archive-sheet h2{margin:0;font-size:24px;font-weight:500;letter-spacing:.4em;text-align:center;color:#1a1410;padding-left:.4em;margin-bottom:6px}
+.archive-sheet .a-sub{font:10px/1.4 system-ui,sans-serif;letter-spacing:.3em;color:rgba(43,29,18,.4);text-align:center;margin-bottom:18px}
+.archive-sheet .section{margin-bottom:18px;opacity:0;transform:translateY(8px);animation:fade-in .5s ease forwards}
+.archive-sheet .section:nth-child(1){animation-delay:.2s}
+.archive-sheet .section:nth-child(2){animation-delay:.4s}
+.archive-sheet .section:nth-child(3){animation-delay:.6s}
+.archive-sheet .section:nth-child(4){animation-delay:.8s}
+.archive-sheet .section:nth-child(5){animation-delay:1s}
+.archive-sheet .section:nth-child(6){animation-delay:1.1s}
+.archive-sheet .section:nth-child(7){animation-delay:1.2s}
+@keyframes fade-in{to{opacity:1;transform:translateY(0)}}
+.archive-sheet .section-title{
+  display:inline-block;font-size:11px;color:var(--cinnabar);
+  letter-spacing:.3em;border-bottom:1px solid var(--cinnabar);
+  padding-bottom:3px;margin-bottom:8px;
+}
+.archive-sheet .h3-row{display:flex;gap:8px;margin-bottom:8px;align-items:flex-start}
+.archive-sheet .h3-no{
+  flex:none;width:22px;height:22px;border-radius:50%;
+  background:var(--cinnabar);color:#f5e8d2;
+  display:flex;align-items:center;justify-content:center;
+  font:600 10px/1 system-ui,sans-serif;margin-top:1px;
+}
+.archive-sheet .h3-text{font-size:13px;line-height:1.6;color:#1a1410;letter-spacing:.05em}
+.archive-sheet .h3-text small{display:block;font-size:10px;color:rgba(43,29,18,.55);margin-top:3px;letter-spacing:.1em;line-height:1.6}
+.poem{
+  background:rgba(176,125,58,.08);padding:14px 18px;
+  border-left:3px solid var(--cinnabar);border-radius:2px;
+  text-align:center;font-size:14px;line-height:1.9;
+  letter-spacing:.2em;color:#1a1410;
+}
+.poem .author{display:block;margin-top:8px;font-size:10px;color:rgba(43,29,18,.55);letter-spacing:.2em}
+.object-row{display:flex;gap:14px;align-items:center;padding:8px;border-radius:2px;transition:background .3s}
+.object-row:hover{background:rgba(176,125,58,.05)}
+.object-row img{
+  width:74px;height:74px;background:#fff8e8;border:1px solid rgba(43,29,18,.1);
+  padding:6px;flex:none;object-fit:contain;
+}
+.object-row .obj-info{flex:1}
+.object-row .obj-name{font-size:14px;color:#1a1410;letter-spacing:.15em;margin-bottom:4px}
+.object-row .obj-desc{font-size:11px;line-height:1.7;color:#5a463a;letter-spacing:.1em}
+.seal-row{text-align:center;margin-top:12px}
+.seal-stamp{
+  display:inline-block;border:2px solid var(--cinnabar);color:var(--cinnabar);
+  padding:6px 10px;font:600 9px/1 system-ui,sans-serif;letter-spacing:.4em;
+  border-radius:2px;writing-mode:vertical-rl;
+}
+
+/* 物候卷轴预览（四态） */
+.pheno-row{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:8px;
+  margin-top:8px;
+}
+.pheno-cell{
+  background:rgba(176,125,58,.04);border:1px solid rgba(43,29,18,.1);
+  padding:6px;text-align:center;border-radius:2px;
+}
+.pheno-cell img{width:100%;aspect-ratio:1/1;object-fit:contain;background:#fff8e8;border:1px solid rgba(43,29,18,.05);margin-bottom:4px}
+.pheno-cell .pheno-label{font-size:9px;color:var(--cinnabar);letter-spacing:.2em;font-weight:600}
+
+/* 花信风 */
+.flower-card{
+  display:flex;gap:12px;align-items:center;padding:8px;border-radius:2px;
+  background:rgba(232,200,116,.06);border:1px solid rgba(232,200,116,.15);
+}
+.flower-card img{width:64px;height:64px;object-fit:contain;background:#fff8e8;border:1px solid rgba(43,29,18,.1);padding:4px;flex:none;border-radius:2px}
+.flower-card .fl-name{font-size:13px;color:#1a1410;letter-spacing:.15em;margin-bottom:4px}
+.flower-card .fl-desc{font-size:11px;line-height:1.7;color:#5a463a;letter-spacing:.1em}
+
+.archive-actions{
+  position:absolute;left:8%;right:8%;bottom:9%;z-index:8;
+  display:flex;gap:8px;justify-content:space-between;
+  pointer-events:auto;
+}
+.archive-actions button{
+  flex:1;padding:.7em 0;background:rgba(246,236,214,.95);color:var(--cinnabar);
+  border:1px solid var(--cinnabar);font:600 11px/1 system-ui,sans-serif;
+  letter-spacing:.3em;border-radius:2px;cursor:pointer;
+  box-shadow:0 2px 8px rgba(0,0,0,.15);
+  transition:all .2s ease;
+  min-height:36px;
+}
+.archive-actions button:hover{background:var(--cinnabar);color:#f5e8d2;transform:translateY(-1px);box-shadow:0 4px 12px rgba(176,60,40,.3)}
+.archive-actions button:active{transform:translateY(0)}
+
+/* =========== 浮层：选择 =========== */
+.modal{
+  position:fixed;inset:0;background:rgba(10,14,12,.85);
+  display:none;align-items:center;justify-content:center;
+  z-index:120;padding:6vw;
+}
+.modal.show{display:flex;animation:fadeIn .3s ease}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.modal .sheet{
+  background:var(--paper-f);width:100%;max-width:380px;
+  padding:24px;position:relative;
+  border:1px solid rgba(43,29,18,.15);
+  box-shadow:0 12px 40px rgba(0,0,0,.5);
+}
+.modal .sheet::before{
+  content:"";position:absolute;inset:6px;border:1px dashed rgba(43,29,18,.2);pointer-events:none;
+}
+.modal .sheet-label{color:var(--cinnabar);font:600 10px/1.4 system-ui,sans-serif;letter-spacing:.3em;margin-bottom:8px}
+.modal h2{margin:0 0 10px;font-size:18px;color:#1a1410;letter-spacing:.2em;font-weight:500}
+.modal p{font-size:12px;line-height:1.8;color:#5a463a;margin-bottom:14px;text-indent:2em}
+.modal .choices{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.modal .choice{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 14px;border:1px solid rgba(43,29,18,.15);
+  background:#fff8e8;color:#1a1410;font:inherit;
+  font-size:13px;letter-spacing:.15em;cursor:pointer;text-align:left;
+  border-radius:2px;
+}
+.modal .choice small{display:block;font-size:10px;color:#5a463a;margin-top:3px;letter-spacing:.1em}
+.modal .choice:hover{background:rgba(168,50,40,.05);border-color:var(--cinnabar)}
+
+/* 仪式中段切换字幕 */
+.quote-toast{
+  position:absolute;left:0;right:0;top:46%;text-align:center;
+  font:13px/1.7 "Songti SC",serif;letter-spacing:.3em;color:#e8c874;
+  text-shadow:0 2px 8px rgba(0,0,0,.6);z-index:48;
+  opacity:0;pointer-events:none;
+}
+.quote-toast.show{animation:toast-flow 3.2s ease forwards}
+@keyframes toast-flow{
+  0%{opacity:0;transform:translateY(10px);letter-spacing:.6em}
+  20%{opacity:1;transform:translateY(0);letter-spacing:.3em}
+  80%{opacity:1;transform:translateY(0);letter-spacing:.3em}
+  100%{opacity:0;transform:translateY(-8px);letter-spacing:.3em}
+}
+.pour-toast{
+  position:absolute;left:0;right:0;top:52%;text-align:center;
+  font:16px/1 "Songti SC",serif;letter-spacing:.35em;color:#1a1008;
+  text-shadow:0 1px 0 rgba(255,255,255,.3),0 2px 12px rgba(0,0,0,.5);z-index:49;
+  opacity:0;pointer-events:none;
+}
+.pour-toast.show{animation:pour-toast-anim .8s ease forwards}
+@keyframes pour-toast-anim{
+  0%{opacity:0;transform:scale(.6)}
+  30%{opacity:1;transform:scale(1.1)}
+  50%{opacity:1;transform:scale(1)}
+  80%{opacity:1}
+  100%{opacity:0;transform:scale(.9)}
+}
+
+.tap-halo{
+  position:absolute;width:64px;height:64px;border-radius:50%;
+  border:2px solid rgba(232,200,116,.6);
+  pointer-events:none;z-index:31;
+  opacity:0;animation:halo 1.4s ease-out infinite;
+}
+@keyframes halo{
+  0%{opacity:0;transform:scale(.5)}
+  50%{opacity:1;transform:scale(1)}
+  100%{opacity:0;transform:scale(1.4)}
+}
+
+/* 点击波纹反馈（兜底视觉） */
+.tap-ripple{
+  position:absolute;width:36px;height:36px;border-radius:50%;
+  border:1.5px solid rgba(232,200,116,.8);pointer-events:none;z-index:55;
+  animation:tap-ripple-anim .7s ease-out forwards;
+}
+@keyframes tap-ripple-anim{
+  0%{opacity:1;transform:scale(.4)}
+  100%{opacity:0;transform:scale(2.6)}
+}
+
+/* Reduce motion */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition:none!important}
+}
+</style>
+</head>
+<body>
+
+<div class="shell" id="game" aria-label="节序循时 · 二十四节气沉浸式交互">
+
+  <!-- ========== 封面 · 节序长卷 ========== -->
+  <section class="scene intro" id="introScene" aria-labelledby="gameTitle">
+    <img class="scene-bg intro-bg" id="introBg" src="webp/vol_01_keyvisual.webp" alt="节序循时 · 卷一孟春">
+    <div class="intro-shade"></div>
+    <canvas class="petals-canvas" id="petalsIntro" aria-hidden="true"></canvas>
+    <div class="corner-seal">节序<br>循时</div>
+
+    <div class="intro-stage">
+
+      <!-- 顶部：标题 + 进入 -->
+      <header class="intro-header">
+        <div class="intro-header-left">
+          <div class="intro-kicker">六 卷 · 二 十 四 节 气 · 仪 式 全 闭 环</div>
+          <h1 class="intro-title" id="gameTitle">节 序 循 时</h1>
+          <p class="intro-subtitle">亲手完成每一候的微型仪轨，<br>在交互中建立对时间秩序的身体感。</p>
+        </div>
+        <div class="intro-header-right">
+          <button class="primary-btn" id="startBtn" type="button" disabled>
+            <span>素 材 装 帧 中</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>
+          </button>
+          <button class="text-btn" id="resumeBtn" type="button" hidden>继 续 上 次 体 验</button>
+        </div>
+      </header>
+
+      <!-- 中部：六卷横向时间轴 -->
+      <nav class="volume-rail" id="volumeRail" aria-label="六卷导览"></nav>
+
+      <!-- 下部：二十四节气手卷 -->
+      <main class="scroll-scroll" id="scrollScroll" aria-label="二十四节气长卷">
+        <div class="scroll-track" id="scrollTrack"></div>
+        <div class="scroll-hint">上 下 滑 动 · 纵 览 全 卷</div>
+      </main>
+
+      <!-- 底栏 -->
+      <footer class="intro-footer">
+        <span>人 物 与 情 节 为 艺 术 化 合 成</span>
+        <span>建 议 开 启 声 音 · 横 屏 体 验 尤 佳</span>
+      </footer>
+
+    </div>
+  </section>
+
+  <!-- ========== 卷首过场 ========== -->
+  <section class="scene volume-scene" id="volumeScene" hidden aria-label="卷首过场">
+    <img class="volume-kv" id="volumeKv" src="" alt="">
+    <div class="volume-shade"></div>
+    <canvas class="petals-canvas" id="petalsVolume" aria-hidden="true"></canvas>
+    <div class="volume-title">
+      <div class="volume-name" id="volumeName">孟 春</div>
+      <div class="volume-en" id="volumeEn">VOL.01 · EARLY SPRING</div>
+      <div class="volume-seal" id="volumeSeal">卷 一</div>
+    </div>
+    <div class="volume-quote" id="volumeQuote">风 入 屠 苏 ，春 回 万 物</div>
+    <div class="volume-tap-hint" id="volumeHint">点 击 任 意 处 · 进 入</div>
+  </section>
+
+  <!-- ========== 序章：卷轴展开 ========== -->
+  <section class="scene archive-scene" id="archiveScene" hidden aria-label="序章 卷轴展开">
+    <img class="scene-bg" id="archiveBg" src="" alt="">
+    <canvas class="petals-canvas" id="petalsArchive" aria-hidden="true"></canvas>
+    <div class="scroll-axis-left" id="axisL"></div>
+    <div class="scroll-axis-right" id="axisR"></div>
+    <div class="scroll-paper closed" id="scrollPaper">
+      <div class="kicker" id="scrollKicker">第 一 卷 · 孟 春</div>
+      <h2 class="main-title" id="scrollTitle">立 春</h2>
+      <div class="en" id="scrollEn">LICHUN · START OF SPRING</div>
+      <div class="quote" id="scrollQuote">风 入 屠 苏 ，春 回 万 物</div>
+      <p class="desc" id="scrollDesc"></p>
+      <div class="seal">孟 春 之 始</div>
+      <button class="scroll-cta" id="scrollCta">轻 点 · 进 入 仪 式</button>
+    </div>
+    <div class="shade"></div>
+  </section>
+
+  <!-- ========== 主仪式 ========== -->
+  <section class="scene ritual-scene" id="ritualScene" hidden aria-label="主仪式">
+    <img class="scene-bg" id="ritualBg" src="" alt="">
+    <img class="sage idle" id="sage" src="" alt="">
+    <img class="vessel idle" id="vessel" src="" alt="">
+    <canvas class="petals-canvas" id="petalsRitual" aria-hidden="true"></canvas>
+    <div id="dynamicLayer"></div>
+    <div class="steam-stack" id="steamStack">
+      <div class="steam-residue" id="steamResidue"></div>
+    </div>
+    <div class="water-mark" id="waterMark"></div>
+    <div class="tap-halo" id="tapHalo"></div>
+
+    <div class="ritual-subtitle" id="ritualSubtitle"></div>
+    <div class="ink-text" id="inkText">咬 春</div>
+
+    <div class="pour-progress" id="pourProgress">
+      <svg viewBox="0 0 60 60">
+        <circle class="track" cx="30" cy="30" r="28"/>
+        <circle class="fill" id="pourFill" cx="30" cy="30" r="28"/>
+      </svg>
+    </div>
+    <div class="pour-counter" id="pourCounter">
+      <div class="num" id="pourNum">0</div>
+      <div class="lbl" id="pourLbl">仪 式 进 行 中</div>
+    </div>
+
+    <div class="beat-zone" id="beatZone" style="display:none">
+      <div class="beat-zone-hint">点 此 击 拂</div>
+    </div>
+    <div class="beat-progress" id="beatProgress"></div>
+    <div class="beat-counter" id="beatCounter">
+      <div class="num" id="beatNum">0</div>
+      <div class="lbl">仪 式 计 数</div>
+    </div>
+
+    <div class="quote-toast" id="quoteToast"></div>
+    <div class="pour-toast" id="pourToast"></div>
+    <div class="task-hint" id="taskHint">长 按 茶 盏 0.8 秒 · 注 汤</div>
+    <div class="shade"></div>
+  </section>
+
+  <!-- ========== 物候档案 ========== -->
+  <section class="scene archive-detail-scene" id="archiveDetailScene" hidden aria-label="物候档案">
+    <div class="archive-sheet" id="archiveSheet"></div>
+    <div class="archive-actions">
+      <button id="replayBtn">重 看 仪 式</button>
+      <button id="nextTermBtn">下 一 节 气 →</button>
+      <button id="backIntroBtn">返 回 卷 首</button>
+    </div>
+  </section>
+
+  <!-- ========== 顶部条 + 状态条 ========== -->
+  <div class="topbar">
+    <div class="chapter-mark">
+      <span class="chapter-no" id="chapterNo">01</span>
+      <span class="chapter-line"></span>
+      <span class="chapter-name" id="chapterName">立 春 · 咬 春 点 茶</span>
+    </div>
+    <div class="icon-actions">
+      <button class="icon-btn" id="muteBtn" type="button" aria-label="静音">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5L6 9H2v6h4l5 4V5zM15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14"/></svg>
+      </button>
+      <button class="icon-btn" id="restartBtn" type="button" aria-label="重新开始">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8M3 3v5h5"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="status" id="statusBar">
+    <div class="status-cell" data-phase="萌"><div class="status-label"><span>M</span><span class="cn">萌</span></div><div class="status-track"><div class="status-fill"></div></div></div>
+    <div class="status-cell" data-phase="抽"><div class="status-label"><span>S</span><span class="cn">抽</span></div><div class="status-track"><div class="status-fill"></div></div></div>
+    <div class="status-cell" data-phase="盈"><div class="status-label"><span>B</span><span class="cn">盈</span></div><div class="status-track"><div class="status-fill"></div></div></div>
+    <div class="status-cell" data-phase="藏"><div class="status-label"><span>H</span><span class="cn">藏</span></div><div class="status-track"><div class="status-fill"></div></div></div>
+  </div>
+  <div class="status-detail" id="statusDetail">
+    <span class="step">第 0 步 / 共 4 步</span>
+    <span class="pct" id="pctText">0%</span>
+  </div>
+
+  <div class="grain"></div>
+
+  <!-- ========== 退出确认 ========== -->
+  <div class="modal" id="exitModal">
+    <div class="sheet">
+      <p class="sheet-label">提 前 收 束</p>
+      <h2>即 将 离 开 仪 式</h2>
+      <p>若此刻离开，物候卷轴停在当前阶段。下次可继续。</p>
+      <div class="choices">
+        <button class="choice" data-action="exit"><span><strong>确 定 离 开</strong><small>保存当前进度到 localStorage</small></span></button>
+        <button class="choice" data-action="back"><span><strong>继 续 仪 式</strong><small>回到当前物候阶段</small></span></button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script>
+/* ============================================================
+   节序循时 · 二十四节气沉浸式交互 · 全部逻辑
+   ============================================================ */
+// 内联数据：兼容 file:// 协议（CORS 禁用 fetch 时回退方案）
+const INLINE_DATA = {"VOLUMES":[{"id":1,"name":"孟春","en":"VOL.01 · EARLY SPRING","keyvisual":"vol_01_keyvisual.webp","accent":"#A8C97A","sub":"立春·雨水·惊蛰·春分"},{"id":2,"name":"仲春","en":"VOL.02 · MID SPRING","keyvisual":"vol_02_keyvisual.webp","accent":"#6BAA75","sub":"清明·谷雨·立夏·小满"},{"id":3,"name":"季夏","en":"VOL.03 · LATE SUMMER","keyvisual":"vol_03_keyvisual.webp","accent":"#2E6B4F","sub":"芒种·夏至·小暑·大暑"},{"id":4,"name":"孟秋","en":"VOL.04 · EARLY AUTUMN","keyvisual":"vol_04_keyvisual.webp","accent":"#C9A857","sub":"立秋·处暑·白露·秋分"},{"id":5,"name":"仲秋","en":"VOL.05 · MID AUTUMN","keyvisual":"vol_05_keyvisual.webp","accent":"#B07D3A","sub":"寒露·霜降·立冬·小雪"},{"id":6,"name":"季冬","en":"VOL.06 · LATE WINTER","keyvisual":"vol_06_keyvisual.webp","accent":"#1F2A38","sub":"大雪·冬至·小寒·大寒"}],"TERMS":[{"en":"LICHUN","quote":"东风解冻，万物始苏","flowerName":"迎春花","season":"孟春","vesselDesc":"汝窑天青，釉色碧润。立春以之沏明前新茶，汤色玉润，香气清远。","child":"j_立春_child_新芽童子.webp","solarDate":"2月3-5日","herb":"j_立春_herb_五辛盘.webp","title":"咬春·点茶迎新","volume":1,"threeHou":[{"no":"一","name":"东风解冻","note":"东方属木，木火之始生，火气乃炽，其必因木而炽，故云「东风解冻」。"},{"no":"二","name":"蛰虫始振","note":"蛰虫因气温回升而苏醒振作，开始从冬眠中苏醒。"},{"no":"三","name":"鱼陟负冰","note":"水底鱼游到水面，似背负冰块游动，实则冰已开始消融。"}],"vessel":"j_立春_obj_青瓷点茶盏.webp","ritualLabel":"点茶仪式","ritualHint":"长按茶盏 0.8 秒 · 注汤七次","fx":{"p1":"fx_立春_01_嫩芽光点.webp","p2":"fx_立春_02_东风.webp"},"bg":"j_立春_bg.webp","name":"立春","vesselName":"青瓷点茶盏","poem":{"text":"春日迟迟，卉木萋萋。仓庚喈喈，采蘩祁祁。","author":"《诗经·小雅·出车》"},"ritualQuote":"咬春之礼，礼成","pinyin":"Lìchūn","pheno":{"sprout":"j_立春_pheno_sprout.webp","shoot":"j_立春_pheno_shoot.webp","bloom":"j_立春_pheno_bloom.webp","store":"j_立春_pheno_store.webp"},"ritualType":"tea","flower":"j_立春_flower_迎春花.webp","herbDesc":"立春食辛，取葱、蒜、椒、姜、韭五种辛物，助阳气生发，辟瘟祛邪。","id":"lichun","flowerDesc":"立春第一花信风。迎春、樱桃、山桃并立春三候花信。","month":"正月节","ritualAction":"注汤七次后击拂茶筅三十次","herbName":"五辛盘","desc":"立春，正月节。立，建始也，五行之气，往者过，来者续，于此而春木之气始至，故谓之立也。"},{"en":"YUSHUI","quote":"天街小雨润如酥","flowerName":"杏花","season":"孟春","vesselDesc":"黄鼠狼尾毫所制，锋锐劲健，最宜书写点画。雨水润笔，墨色华滋。","child":"j_雨水_child_鸿雁童子.webp","solarDate":"2月18-20日","herb":"j_雨水_herb_车前子.webp","title":"鸿雁来·润笔","volume":1,"threeHou":[{"no":"一","name":"獭祭鱼","note":"水獭开始捕鱼，排列如祭。"},{"no":"二","name":"鸿雁来","note":"候鸟大雁从南方飞回北方。"},{"no":"三","name":"草木萌动","note":"草木随地中阳气上腾而开始萌动抽芽。"}],"vessel":"j_雨水_obj_狼毫毛笔.webp","ritualLabel":"润笔仪式","ritualHint":"点击屏幕 · 长按 2 秒润笔","fx":{"p1":"fx_雨水_01_雨丝.webp","p2":"fx_雨水_02_水滴涟漪.webp"},"bg":"j_雨水_bg.webp","name":"雨水","vesselName":"狼毫毛笔","poem":{"text":"天街小雨润如酥，草色遥看近却无。最是一年春好处，绝胜烟柳满皇都。","author":"韩愈《早春呈水部张十八员外》"},"ritualQuote":"墨润春水，笔落惊蛇","pinyin":"Yǔshuǐ","pheno":{"sprout":"j_雨水_pheno_sprout.webp","shoot":"j_雨水_pheno_shoot.webp","bloom":"j_雨水_pheno_bloom.webp","store":"j_雨水_pheno_store.webp"},"ritualType":"brush","flower":"j_雨水_flower_杏花.webp","herbDesc":"雨水节气本草。车前科植物车前的干燥种子，利尿通淋、渗湿止泻。","id":"yushui","flowerDesc":"雨水三候花信：菜花、杏花、李花。","month":"正月中","ritualAction":"点击触发，长按 2 秒完成润笔","herbName":"车前子","desc":"雨水，正月中。天一生水，春始属木，然生木者必水也，故立春后继之雨水。"},{"en":"JINGZHE","quote":"微雨众卉新，一雷惊蛰始","flowerName":"山桃","season":"孟春","vesselDesc":"桑木鼓身，牛皮蒙面。惊蛰击鼓，唤醒蛰虫，顺应天时。","child":"j_惊蛰_child_蛇尾童子.webp","solarDate":"3月5-7日","herb":"j_惊蛰_herb_雷丸.webp","title":"龙蛇起·击鼓","volume":1,"threeHou":[{"no":"一","name":"桃始华","note":"桃花开始绽放。"},{"no":"二","name":"仓庚鸣","note":"黄鹂开始鸣叫。"},{"no":"三","name":"鹰化为鸠","note":"鹰隼开始隐匿，鸠鸟现身。"}],"vessel":"j_惊蛰_obj_牛皮小鼓.webp","ritualLabel":"击鼓仪式","ritualHint":"按节奏点击鼓面 7 次","fx":{"p1":"fx_惊蛰_01_闪电弧光.webp","p2":"fx_惊蛰_02_春雷余波.webp"},"bg":"j_惊蛰_bg.webp","name":"惊蛰","vesselName":"牛皮小鼓","poem":{"text":"微雨众卉新，一雷惊蛰始。田家几日闲，耕种从此起。","author":"韦应物《观田家》"},"ritualQuote":"雷动九霄，万物苏醒","pinyin":"Jīngzhé","pheno":{"sprout":"j_惊蛰_pheno_sprout.webp","shoot":"j_惊蛰_pheno_shoot.webp","bloom":"j_惊蛰_pheno_bloom.webp","store":"j_惊蛰_pheno_store.webp"},"ritualType":"drum","flower":"j_惊蛰_flower_山桃.webp","herbDesc":"白蘑科真菌雷丸的干燥菌核，驱虫消积，古人云雷击而生。","id":"jingzhe","flowerDesc":"惊蛰三候花信：桃花、棣棠、蔷薇。","month":"二月节","ritualAction":"按节奏点击鼓面 7 次，鼓声震蛰","herbName":"雷丸","desc":"惊蛰，二月节。《夏小正》曰：正月启蛰，言发蛰也。万物出乎震，震为雷，故曰惊蛰。"},{"en":"CHUNFEN","quote":"竹外桃花三两枝","flowerName":"海棠","season":"孟春","vesselDesc":"竹骨绢面，彩绘蝴蝶。春分踏青，放鸢迎风。","child":"j_春分_child_双燕童子.webp","solarDate":"3月20-22日","herb":"j_春分_herb_桃花.webp","title":"踏青·放鸢","volume":1,"threeHou":[{"no":"一","name":"玄鸟至","note":"燕子从南方飞回。"},{"no":"二","name":"雷乃发声","note":"阴阳相薄为雷，至此阳气日盛，雷声始动。"},{"no":"三","name":"始电","note":"雷鸣之后，电光始见。"}],"vessel":"j_春分_obj_蝴蝶纸鸢.webp","ritualLabel":"放鸢仪式","ritualHint":"按节奏点击 7 次 · 鸢飞冲天","fx":{"p1":"fx_春分_01_纸鸢剪影.webp","p2":"fx_春分_02_飞燕掠影.webp"},"bg":"j_春分_bg.webp","name":"春分","vesselName":"蝴蝶纸鸢","poem":{"text":"竹外桃花三两枝，春江水暖鸭先知。蒌蒿满地芦芽短，正是河豚欲上时。","author":"苏轼《惠崇春江晚景》"},"ritualQuote":"纸鸢高飞，春风万里","pinyin":"Chūnfēn","pheno":{"sprout":"j_春分_pheno_sprout.webp","shoot":"j_春分_pheno_shoot.webp","bloom":"j_春分_pheno_bloom.webp","store":"j_春分_pheno_store.webp"},"ritualType":"kite","flower":"j_春分_flower_海棠.webp","herbDesc":"蔷薇科桃的花朵，春分节气本草。活血化瘀、润肤悦色。","id":"chunfen","flowerDesc":"春分三候花信：海棠、梨花、木兰。","month":"二月中","ritualAction":"按节奏点击 7 次触发纸鸢升空","herbName":"桃花","desc":"春分，二月中。日光直射赤道，昼夜均而寒暑平，故曰春分。"},{"en":"QINGMING","quote":"清明时节雨纷纷","flowerName":"桐花","season":"仲春","vesselDesc":"沉香木粉调制之线香，烟细而长，香气温润。","child":"j_清明_child_柳枝童子.webp","solarDate":"4月4-6日","herb":"j_清明_herb_青蒿.webp","title":"插柳·焚香","volume":2,"threeHou":[{"no":"一","name":"桐始华","note":"桐树开始开花。"},{"no":"二","name":"田鼠化为鴽","note":"田鼠因阳气盛而隐去，鹌鹑类小鸟开始出现。"},{"no":"三","name":"虹始见","note":"雨后天空可见到彩虹。"}],"vessel":"j_清明_obj_沉香线香.webp","ritualLabel":"焚香仪式","ritualHint":"点击屏幕 · 长按 1 秒引燃","fx":{"p1":"fx_清明_01_烟雨蒙罩.webp","p2":"fx_清明_02_柳絮.webp"},"bg":"j_清明_bg.webp","name":"清明","vesselName":"沉香线香","poem":{"text":"清明时节雨纷纷，路上行人欲断魂。借问酒家何处有，牧童遥指杏花村。","author":"杜牧《清明》"},"ritualQuote":"香烟缕缕，清明思亲","pinyin":"Qīngmíng","pheno":{"sprout":"j_清明_pheno_sprout.webp","shoot":"j_清明_pheno_shoot.webp","bloom":"j_清明_pheno_bloom.webp","store":"j_清明_pheno_store.webp"},"ritualType":"incense","flower":"j_清明_flower_桐花.webp","herbDesc":"菊科植物黄花蒿的全草，清热解暑、截疟。屠呦呦因青蒿素获诺贝尔奖。","id":"qingming","flowerDesc":"清明三候花信：桐花、麦花、柳花。","month":"三月节","ritualAction":"点击触发，长按 1 秒引燃香烟","herbName":"青蒿","desc":"清明，三月节。万物齐乎巽，物至此时皆以洁齐而清明矣。"},{"en":"GUYU","quote":"谷雨春光晓，山川黛色青","flowerName":"牡丹","season":"仲春","vesselDesc":"竹制茶量器，宋代点茶必备。量取茶末，雅致古朴。","child":"j_谷雨_child_牡丹童子.webp","solarDate":"4月19-21日","herb":"j_谷雨_herb_谷雨茶.webp","title":"牡丹·煎茶","volume":2,"threeHou":[{"no":"一","name":"萍始生","note":"水面浮萍开始生长。"},{"no":"二","name":"鸣鸠拂其羽","note":"布谷鸟抖动羽毛开始鸣叫。"},{"no":"三","name":"戴胜降于桑","note":"戴胜鸟落于桑树，预示蚕事将兴。"}],"vessel":"j_谷雨_obj_竹茶则.webp","ritualLabel":"煎茶仪式","ritualHint":"点击屏幕 · 长按 1.5 秒煎茶","fx":{"p1":"fx_谷雨_01_落英.webp","p2":"fx_谷雨_02_露珠光晕.webp"},"bg":"j_谷雨_bg.webp","name":"谷雨","vesselName":"竹茶则","poem":{"text":"邵伯陂塘半日游，岸花汀草晚悠悠。谷雨初晴云散尽，画楼南北绿阴稠。","author":"曹邺《老圃堂》"},"ritualQuote":"茶烟袅袅，谷雨生香","pinyin":"Gǔyǔ","pheno":{"sprout":"j_谷雨_pheno_sprout.webp","shoot":"j_谷雨_pheno_shoot.webp","bloom":"j_谷雨_pheno_bloom.webp","store":"j_谷雨_pheno_store.webp"},"ritualType":"tea-select","flower":"j_谷雨_flower_牡丹.webp","herbDesc":"谷雨时节所采之雨前龙井。茶性温和，香气怡人，传说谷雨茶喝了清火明目。","id":"guyu","flowerDesc":"谷雨三候花信：牡丹、荼蘼、楝花。","month":"三月中","ritualAction":"点击触发，长按 1.5 秒完成煎茶","herbName":"谷雨茶","desc":"谷雨，三月中。自雨水后，土膏脉动，今又雨其谷于水也。"},{"en":"LIXIA","quote":"绿树阴浓夏日长","flowerName":"石榴花","season":"仲春","vesselDesc":"银质簪首作石榴花，红宝石镶嵌。立夏簪花，驱邪纳福。","child":"j_立夏_child_榴花童子.webp","solarDate":"5月5-7日","herb":"j_立夏_herb_樱桃.webp","title":"称人·簪花","volume":2,"threeHou":[{"no":"一","name":"蝼蝈鸣","note":"蝼蝈开始鸣叫。"},{"no":"二","name":"蚯蚓出","note":"蚯蚓从土里钻出来。"},{"no":"三","name":"王瓜生","note":"王瓜的藤蔓开始迅速攀爬生长。"}],"vessel":"j_立夏_obj_石榴花簪.webp","ritualLabel":"簪花仪式","ritualHint":"点击屏幕 7 次 · 簪花入鬓","fx":{"p1":"fx_立夏_01_榴火.webp","p2":"fx_立夏_02_蝉声波.webp"},"bg":"j_立夏_bg.webp","name":"立夏","vesselName":"石榴花簪","poem":{"text":"槐柳阴初密，帘栊暑尚微。午风吹鬓发，檐雨熟黄梅。","author":"陆游《立夏》"},"ritualQuote":"榴花映鬓，夏意初成","pinyin":"Lìxià","pheno":{"sprout":"j_立夏_pheno_sprout.webp","shoot":"j_立夏_pheno_shoot.webp","bloom":"j_立夏_pheno_bloom.webp","store":"j_立夏_pheno_store.webp"},"ritualType":"hairpin","flower":"j_立夏_flower_石榴花.webp","herbDesc":"蔷薇科樱属植物的果实，立夏节气本草。补中益气、祛风除湿。","id":"lixia","flowerDesc":"立夏三候花信：石榴花、蔷薇花、凌霄花。","month":"四月节","ritualAction":"点击屏幕 7 次完成簪花","herbName":"樱桃","desc":"立夏，四月节。万物至此皆长大，故名立夏也。"},{"en":"XIAOMAN","quote":"夜雨初长麦如人","flowerName":"蔷薇","season":"仲春","vesselDesc":"陶制水壶，壶身朱书「灌」字。小满祭车神、灌浆所用。","child":"j_小满_child_麦穗童子.webp","solarDate":"5月20-22日","herb":"j_小满_herb_麦冬.webp","title":"祭车神·灌浆","volume":2,"threeHou":[{"no":"一","name":"苦菜秀","note":"苦菜枝叶繁茂。"},{"no":"二","name":"靡草死","note":"喜阴的细软草类在强烈的阳光下开始枯死。"},{"no":"三","name":"麦秋至","note":"小麦等夏熟作物籽粒开始灌浆饱满，但未成熟。"}],"vessel":"j_小满_obj_陶灌字水壶.webp","ritualLabel":"灌浆仪式","ritualHint":"点击屏幕 · 长按 1.5 秒灌浆","fx":{"p1":"fx_小满_01_麦芒金光.webp","p2":"fx_小满_02_水渠波纹.webp"},"bg":"j_小满_bg.webp","name":"小满","vesselName":"陶灌字水壶","poem":{"text":"夜雨初长麦如人，晓看扶杖亦强身。乾坤未必非儿戏，稼穑艰难岂易论。","author":"欧阳修《归田园四时乐春夏二首》"},"ritualQuote":"麦穗灌浆，小满初盈","pinyin":"Xiǎomǎn","pheno":{"sprout":"j_小满_pheno_sprout.webp","shoot":"j_小满_pheno_shoot.webp","bloom":"j_小满_pheno_bloom.webp","store":"j_小满_pheno_store.webp"},"ritualType":"pour","flower":"j_小满_flower_蔷薇.webp","herbDesc":"百合科沿阶草的块根，养阴生津、润肺清心。小满节气本草。","id":"xiaoman","flowerDesc":"小满三候花信：蔷薇、莲花、枇杷花。","month":"四月中","ritualAction":"点击触发，长按 1.5 秒灌浆麦穗","herbName":"麦冬","desc":"小满，四月中。小满者，物至于此小得盈满。"},{"en":"MANGZHONG","quote":"时雨及芒种，四野皆插秧","flowerName":"栀子花","season":"季夏","vesselDesc":"竹骨油纸，桐油浸涂。芒种梅雨，出行必备。","child":"j_芒种_child_螳螂童子.webp","solarDate":"6月5-7日","herb":"j_芒种_herb_薏苡.webp","title":"听雨·送花神","volume":3,"threeHou":[{"no":"一","name":"螳螂生","note":"螳螂于上一年深秋产卵，此时破壳生出。"},{"no":"二","name":"鵙始鸣","note":"伯劳鸟开始在枝头鸣叫。"},{"no":"三","name":"反舌无声","note":"反舌鸟因感应阴气微生而停止鸣叫。"}],"vessel":"j_芒种_obj_油纸伞.webp","ritualLabel":"听雨仪式","ritualHint":"按节奏点击 7 次 · 听雨四档","fx":{"p1":"fx_芒种_01_雨幕.webp","p2":"fx_芒种_02_螳影.webp"},"bg":"j_芒种_bg.webp","name":"芒种","vesselName":"油纸伞","poem":{"text":"时雨及芒种，四野皆插秧。家家麦饭美，处处菱歌长。","author":"陆游《时雨》"},"ritualQuote":"梅雨连绵，芒种忙忙","pinyin":"Mángzhòng","pheno":{"sprout":"j_芒种_pheno_sprout.webp","shoot":"j_芒种_pheno_shoot.webp","bloom":"j_芒种_pheno_bloom.webp","store":"j_芒种_pheno_store.webp"},"ritualType":"rain","flower":"j_芒种_flower_栀子花.webp","herbDesc":"禾本科薏苡的种仁，健脾渗湿、清热排脓。芒种节气本草。","id":"mangzhong","flowerDesc":"芒种三候花信：栀子花、荷包花、牡丹花。","month":"五月节","ritualAction":"按节奏点击 7 次触发雨势四档","herbName":"薏苡","desc":"芒种，五月节。谓有芒之种谷可稼种矣。"},{"en":"XIAZHI","quote":"昼晷已云极，宵漏自此长","flowerName":"荷花","season":"季夏","vesselDesc":"蒲葵叶制成，雅称「芭蕉扇」。夏至持扇，凉风入怀。","child":"j_夏至_child_蝉翼童子.webp","solarDate":"6月21-22日","herb":"j_夏至_herb_荔枝.webp","title":"蝉始鸣·簪荔","volume":3,"threeHou":[{"no":"一","name":"鹿角解","note":"鹿的角开始脱落。"},{"no":"二","name":"蜩始鸣","note":"蝉开始鸣叫。"},{"no":"三","name":"半夏生","note":"喜阴的药草半夏开始生长。"}],"vessel":"j_夏至_obj_蒲葵扇.webp","ritualLabel":"听蝉仪式","ritualHint":"按节奏点击 7 次 · 集齐五音蝉声","fx":{"p1":"fx_夏至_01_蝉翼光斑.webp","p2":"fx_夏至_02_日影最短.webp"},"bg":"j_夏至_bg.webp","name":"夏至","vesselName":"蒲葵扇","poem":{"text":"昼晷已云极，宵漏自此长。未及施政教，所忧变炎凉。","author":"韦应物《夏至避暑北池》"},"ritualQuote":"蝉声如雨，夏至悠长","pinyin":"Xiàzhì","pheno":{"sprout":"j_夏至_pheno_sprout.webp","shoot":"j_夏至_pheno_shoot.webp","bloom":"j_夏至_pheno_bloom.webp","store":"j_夏至_pheno_store.webp"},"ritualType":"cicada","flower":"j_夏至_flower_荷花.webp","herbDesc":"无患子科荔枝的果实，生津止渴、补脾益血。","id":"xiazhi","flowerDesc":"夏至三候花信：鹿葱、菖蒲、荷花。","month":"五月中","ritualAction":"按节奏点击 7 次集齐五声音阶","herbName":"荔枝","desc":"夏至，五月中。日北至，日长之至，日影短至，故曰夏至。"},{"en":"XIAOSHU","quote":"倏忽温风至，因循小暑来","flowerName":"凤仙花","season":"季夏","vesselDesc":"佛道经典卷轴装帧，丝带封缄。小暑翻经，晒霉防蠹。","child":"j_小暑_child_紫藤童子.webp","solarDate":"7月6-8日","herb":"j_小暑_herb_莲子.webp","title":"晒书·翻经","volume":3,"threeHou":[{"no":"一","name":"温风至","note":"温热之风至。"},{"no":"二","name":"蟋蟀居壁","note":"蟋蟀因热气温燥而离开田野，靠近墙壁。"},{"no":"三","name":"鹰始挚","note":"老鹰因地面气温高而开始搏击长空。"}],"vessel":"j_小暑_obj_经卷.webp","ritualLabel":"晒书仪式","ritualHint":"按节奏点击 7 次 · 翻经五页","fx":{"p1":"fx_小暑_01_紫藤花雨.webp","p2":"fx_小暑_02_晒书光带.webp"},"bg":"j_小暑_bg.webp","name":"小暑","vesselName":"经卷","poem":{"text":"侯家大道傍，蝉噪树苍苍。开锁洞门远，卷帘官舍凉。","author":"韩翃《夏日》"},"ritualQuote":"经卷微风，墨香盈袖","pinyin":"Xiǎoshǔ","pheno":{"sprout":"j_小暑_pheno_sprout.webp","shoot":"j_小暑_pheno_shoot.webp","bloom":"j_小暑_pheno_bloom.webp","store":"j_小暑_pheno_store.webp"},"ritualType":"page","flower":"j_小暑_flower_凤仙花.webp","herbDesc":"睡莲科莲的成熟种子，补脾止泻、益肾涩精。","id":"xiaoshu","flowerDesc":"小暑三候花信：凤仙花、荷花、茉莉花。","month":"六月节","ritualAction":"按节奏点击 7 次翻经书页","herbName":"莲子","desc":"小暑，六月节。暑，热也。就热之中分为大小，月初为小，月中为大，今则热气犹小也。"},{"en":"DASHU","quote":"永日不可暮，炎蒸毒我肠","flowerName":"紫薇","season":"季夏","vesselDesc":"圆形绢面，绘荷花、题字。大暑持扇纳凉，雅韵悠然。","child":"j_大暑_child_萤火童子.webp","solarDate":"7月22-24日","herb":"j_大暑_herb_荷叶.webp","title":"萤火·纳凉","volume":3,"threeHou":[{"no":"一","name":"腐草为萤","note":"古人认为萤火虫由腐烂的草变成。"},{"no":"二","name":"土润溽暑","note":"土地湿润，气候闷热。"},{"no":"三","name":"大雨行时","note":"常有大雨出现。"}],"vessel":"j_大暑_obj_绢面团扇.webp","ritualLabel":"萤火仪式","ritualHint":"点击屏幕 7 处 · 萤火聚字","fx":{"p1":"fx_大暑_01_萤火光点.webp","p2":"fx_大暑_02_暮色渐变.webp"},"bg":"j_大暑_bg.webp","name":"大暑","vesselName":"绢面团扇","poem":{"text":"永日不可暮，炎蒸毒我肠。安得万里风，飘飖吹我裳。","author":"杜甫《夏夜叹》"},"ritualQuote":"萤火点点，夏夜清凉","pinyin":"Dàshǔ","pheno":{"sprout":"j_大暑_pheno_sprout.webp","shoot":"j_大暑_pheno_shoot.webp","bloom":"j_大暑_pheno_bloom.webp","store":"j_大暑_pheno_store.webp"},"ritualType":"firefly","flower":"j_大暑_flower_紫薇.webp","herbDesc":"睡莲科莲的叶，清暑利湿、升发清阳。大暑节气本草。","id":"dashu","flowerDesc":"大暑三候花信：紫薇花、凌霄花、茉莉花。","month":"六月中","ritualAction":"点击屏幕 7 处触发萤火聚字","herbName":"荷叶","desc":"大暑，六月中。暑，热也。就热之中分为大小，月初为小，月中为大，今则热气犹大也。"},{"en":"LIQIU","quote":"自古逢秋悲寂寥","flowerName":"紫茉莉","season":"孟秋","vesselDesc":"铜制小秤，杆细如笔，专用于秤量金贵药材与香料。立秋贴秋膘。","child":"j_立秋_child_桐叶童子.webp","solarDate":"8月7-9日","herb":"j_立秋_herb_百合.webp","title":"贴秋膘·悬秤","volume":4,"threeHou":[{"no":"一","name":"凉风至","note":"西方凄清之风曰凉风。"},{"no":"二","name":"白露降","note":"大雨之后，清凉风来，空气中水汽凝结为白露。"},{"no":"三","name":"寒蝉鸣","note":"寒蝉感阴而鸣。"}],"vessel":"j_立秋_obj_铜杆戥子秤.webp","ritualLabel":"悬秤仪式","ritualHint":"点击屏幕 · 长按 1.5 秒悬秤","fx":{"p1":"fx_立秋_01_落叶.webp","p2":"fx_立秋_02_金阳斜光.webp"},"bg":"j_立秋_bg.webp","name":"立秋","vesselName":"铜杆戥子秤","poem":{"text":"自古逢秋悲寂寥，我言秋日胜春朝。晴空一鹤排云上，便引诗情到碧霄。","author":"刘禹锡《秋词》"},"ritualQuote":"悬秤知秋，贴膘迎爽","pinyin":"Lìqiū","pheno":{"sprout":"j_立秋_pheno_sprout.webp","shoot":"j_立秋_pheno_shoot.webp","bloom":"j_立秋_pheno_bloom.webp","store":"j_立秋_pheno_store.webp"},"ritualType":"scale","flower":"j_立秋_flower_紫茉莉.webp","herbDesc":"百合科卷丹或百合的干燥肉质鳞叶，养阴润肺、清心安神。","id":"liqiu","flowerDesc":"立秋三候花信：紫茉莉、含羞草、龙船花。","month":"七月节","ritualAction":"点击触发，长按 1.5 秒完成悬秤","herbName":"百合","desc":"立秋，七月节。秋，揫也，物于此而揫敛也。"},{"en":"CHUSHU","quote":"四时俱可喜，最好新秋时","flowerName":"玉簪","season":"孟秋","vesselDesc":"纸扎莲瓣形，内置小烛。处暑之夜，放灯河中，寄思远人。","child":"j_处暑_child_鹰隼童子.webp","solarDate":"8月22-24日","herb":"j_处暑_herb_芦根.webp","title":"听雨·放河灯","volume":4,"threeHou":[{"no":"一","name":"鹰乃祭鸟","note":"鹰开始捕猎鸟类，并把猎物排列如祭。"},{"no":"二","name":"天地始肃","note":"天地万物开始凋零。"},{"no":"三","name":"禾乃登","note":"黍、稷、稻、粱等农作物成熟。"}],"vessel":"j_处暑_obj_莲瓣河灯.webp","ritualLabel":"放河灯仪式","ritualHint":"点击屏幕 · 长按 2 秒放灯","fx":{"p1":"fx_处暑_01_河灯摇曳.webp","p2":"fx_处暑_02_蜻蜓光翼.webp"},"bg":"j_处暑_bg.webp","name":"处暑","vesselName":"莲瓣河灯","poem":{"text":"何处人间似仙境，春山携妓采茶时。紫箫声绝忽飞去，笑倒刘纲与左慈。","author":"吕本中《处暑》"},"ritualQuote":"河灯远去，秋水共长","pinyin":"Chǔshǔ","pheno":{"sprout":"j_处暑_pheno_sprout.webp","shoot":"j_处暑_pheno_shoot.webp","bloom":"j_处暑_pheno_bloom.webp","store":"j_处暑_pheno_store.webp"},"ritualType":"lantern","flower":"j_处暑_flower_玉簪.webp","herbDesc":"禾本科芦苇的根茎，清热泻火、生津止渴。","id":"chushu","flowerDesc":"处暑三候花信：玉簪花、桂花、紫薇。","month":"七月中","ritualAction":"点击触发，长按 2 秒放灯入水","herbName":"芦根","desc":"处暑，七月中。暑，止也。处，止也。暑气至此而止矣。"},{"en":"BAILU","quote":"蒹葭苍苍，白露为霜","flowerName":"芦花","season":"孟秋","vesselDesc":"木制笔架，造型如山。白露候雁，毛笔归架。","child":"j_白露_child_鸿雁童子.webp","solarDate":"9月7-9日","herb":"j_白露_herb_白茅根.webp","title":"蒹葭·候雁","volume":4,"threeHou":[{"no":"一","name":"鸿雁来","note":"鸿雁自北而南迁徙，先大后小。"},{"no":"二","name":"玄鸟归","note":"燕子南归避寒。"},{"no":"三","name":"群鸟养羞","note":"百鸟开始贮存食物以备过冬。"}],"vessel":"j_白露_obj_木笔架.webp","ritualLabel":"候雁仪式","ritualHint":"点击屏幕 7 次 · 候雁成阵","fx":{"p1":"fx_白露_01_露珠串.webp","p2":"fx_白露_02_雁字光带.webp"},"bg":"j_白露_bg.webp","name":"白露","vesselName":"木笔架","poem":{"text":"蒹葭苍苍，白露为霜。所谓伊人，在水一方。","author":"《诗经·秦风·蒹葭》"},"ritualQuote":"雁字南归，秋意渐浓","pinyin":"Báilù","pheno":{"sprout":"j_白露_pheno_sprout.webp","shoot":"j_白露_pheno_shoot.webp","bloom":"j_白露_pheno_bloom.webp","store":"j_白露_pheno_store.webp"},"ritualType":"goose","flower":"j_白露_flower_芦花.webp","herbDesc":"禾本科白茅的根茎，凉血止血、清热利尿。","id":"bailu","flowerDesc":"白露三候花信：芦花、菱花、菊花。","month":"八月节","ritualAction":"点击屏幕 7 次集齐飞雁阵","herbName":"白茅根","desc":"白露，八月节。秋属金，金色白，阴气渐重，露凝而白也。"},{"en":"QIUFEN","quote":"今夜月明人尽望","flowerName":"桂花","season":"孟秋","vesselDesc":"青铜铸造，背面雕刻月相八相。秋分候月，对镜观象。","child":"j_秋分_child_玉兔童子.webp","solarDate":"9月22-24日","herb":"j_秋分_herb_桂花.webp","title":"祭月·候月","volume":4,"threeHou":[{"no":"一","name":"雷始收声","note":"雷因阳气盛而发声，秋分后阴气始盛，雷声始收。"},{"no":"二","name":"蛰虫坯户","note":"蛰虫开始藏入洞穴，并用细土封口以防寒气。"},{"no":"三","name":"水始涸","note":"降雨量开始减少，水汽蒸发快，湖泊河流的水量减少。"}],"vessel":"j_秋分_obj_月相铜.webp","ritualLabel":"候月仪式","ritualHint":"点击屏幕 · 长按 2 秒叩月","fx":{"p1":"fx_秋分_01_满月光晕.webp","p2":"fx_秋分_02_桂香粒子.webp"},"bg":"j_秋分_bg.webp","name":"秋分","vesselName":"月相铜镜","poem":{"text":"今夜月明人尽望，不知秋思落谁家。","author":"王建《十五夜望月》"},"ritualQuote":"月满秋分，清辉万里","pinyin":"Qiūfēn","pheno":{"sprout":"j_秋分_pheno_sprout.webp","shoot":"j_秋分_pheno_shoot.webp","bloom":"j_秋分_pheno_bloom.webp","store":"j_秋分_pheno_store.webp"},"ritualType":"moon","flower":"j_秋分_flower_桂花.webp","herbDesc":"木犀科木犀的花，辛温芳香，化痰散瘀、温肺化痰。","id":"qiufen","flowerDesc":"秋分三候花信：桂花、海棠、紫荆。","month":"八月中","ritualAction":"点击触发，长按 2 秒叩月","herbName":"桂花","desc":"秋分，八月中。雷始收声，蛰虫坯户，水始涸。日光直射赤道，昼夜均而寒暑平。"},{"en":"HANLU","quote":"九月九日望乡台","flowerName":"菊花","season":"仲秋","vesselDesc":"宋代龙泉青瓷酒盏，釉色梅子青。寒露登高，饮菊花酒。","child":"j_寒露_child_菊花童.webp","solarDate":"10月8-9日","herb":"j_寒露_herb_菊花.webp","title":"登高·赏菊","volume":5,"threeHou":[{"no":"一","name":"鸿雁来宾","note":"鸿雁排成一字或人字形大举南迁。"},{"no":"二","name":"雀入大水为蛤","note":"古人看到海边突然出现很多蛤蜊，认为鸟雀入大水化为蛤蜊。"},{"no":"三","name":"菊有黄华","note":"菊始华。"}],"vessel":"j_寒露_obj_青瓷酒盏.webp","ritualLabel":"登高仪式","ritualHint":"点击屏幕 · 长按 1.5 秒登顶","fx":{"p1":"fx_寒露_01_霜花.webp","p2":"fx_寒露_02_菊酒金辉.webp"},"bg":"j_寒露_bg.webp","name":"寒露","vesselName":"青瓷酒盏","poem":{"text":"独在异乡为异客，每逢佳节倍思亲。遥知兄弟登高处，遍插茱萸少一人。","author":"王维《九月九日忆山东兄弟》"},"ritualQuote":"登高望远，菊酒一杯","pinyin":"Hánlù","pheno":{"sprout":"j_寒露_pheno_sprout.webp","shoot":"j_寒露_pheno_shoot.webp","bloom":"j_寒露_pheno_bloom.webp","store":"j_寒露_pheno_store.webp"},"ritualType":"climb","flower":"j_寒露_flower_菊花.webp","herbDesc":"菊科菊的干燥头状花序，散风清热、平肝明目。","id":"hanlu","flowerDesc":"寒露三候花信：菊花、桂花、海棠。","month":"九月节","ritualAction":"点击触发，长按 1.5 秒登顶峰","herbName":"菊花","desc":"寒露，九月节。露气寒冷，将凝结也。"},{"en":"SHUANGJIANG","quote":"远上寒山石径斜","flowerName":"柿花","season":"仲秋","vesselDesc":"柿霜压制成块，包糯米纸。霜降节令小食，清甜不腻。","child":"j_霜降_child_柿子童子.webp","solarDate":"10月23-24日","herb":"j_霜降_herb_柿霜.webp","title":"赏红叶·饮酒","volume":5,"threeHou":[{"no":"一","name":"豺乃祭兽","note":"豺这类动物开始捕猎，并将猎物排列如祭。"},{"no":"二","name":"草木黄落","note":"草木枯黄，开始凋落。"},{"no":"三","name":"蛰虫咸俯","note":"蜇虫垂下头来，准备冬眠。"}],"vessel":"j_霜降_obj_柿霜糖.webp","ritualLabel":"饮酒仪式","ritualHint":"点击屏幕 · 长按 1 秒举杯","fx":{"p1":"fx_霜降_01_红柿光点.webp","p2":"fx_霜降_02_霜气氤氲.webp"},"bg":"j_霜降_bg.webp","name":"霜降","vesselName":"柿霜糖","poem":{"text":"远上寒山石径斜，白云生处有人家。停车坐爱枫林晚，霜叶红于二月花。","author":"杜牧《山行》"},"ritualQuote":"霜叶红于二月花","pinyin":"Shuāngjiàng","pheno":{"sprout":"j_霜降_pheno_sprout.webp","shoot":"j_霜降_pheno_shoot.webp","bloom":"j_霜降_pheno_bloom.webp","store":"j_霜降_pheno_store.webp"},"ritualType":"wine","flower":"j_霜降_flower_柿花.webp","herbDesc":"柿饼外表生成的白色粉霜，润肺止咳、生津利咽。","id":"shuangjiang","flowerDesc":"霜降三候花信：丹枫、柿花、芙蓉。","month":"九月中","ritualAction":"点击触发，长按 1 秒举杯饮酒","herbName":"柿霜","desc":"霜降，九月中。气肃而凝，露结为霜矣。"},{"en":"LIDONG","quote":"细雨生寒未有霜","flowerName":"山茶","season":"仲秋","vesselDesc":"宜兴紫砂红泥所制小风炉，立冬围炉煮茶烤栗。","child":"j_立冬_child_松鼠童子.webp","solarDate":"11月7-8日","herb":"j_立冬_herb_栗子.webp","title":"贺冬·围炉","volume":5,"threeHou":[{"no":"一","name":"水始冰","note":"水面开始结冰。"},{"no":"二","name":"地始冻","note":"土地开始冻结。"},{"no":"三","name":"雉入大水为蜃","note":"雉即野鸡一类的大鸟，蜃为大蛤，立冬后野鸡一类的大鸟便不多见了。"}],"vessel":"j_立冬_obj_红泥小风炉.webp","ritualLabel":"围炉仪式","ritualHint":"点击屏幕 7 次 · 围炉烤炙","fx":{"p1":"fx_立冬_01_炉火红光.webp","p2":"fx_立冬_02_薄冰纹.webp"},"bg":"j_立冬_bg.webp","name":"立冬","vesselName":"红泥小风炉","poem":{"text":"黄菊已无多日事，也须拈出作寒花。","author":"钱起《立冬》"},"ritualQuote":"围炉夜话，冬意渐深","pinyin":"Lìdōng","pheno":{"sprout":"j_立冬_pheno_sprout.webp","shoot":"j_立冬_pheno_shoot.webp","bloom":"j_立冬_pheno_bloom.webp","store":"j_立冬_pheno_store.webp"},"ritualType":"fireplace","flower":"j_立冬_flower_山茶.webp","herbDesc":"壳斗科栗的种仁，养胃健脾、补肾强筋。立冬节气本草。","id":"lidong","flowerDesc":"立冬三候花信：山茶、瑞香、枇杷。","month":"十月节","ritualAction":"点击屏幕 7 次围炉烤栗","herbName":"栗子","desc":"立冬，十月节。冬，终也，万物收藏也。"},{"en":"XIAOXUE","quote":"夜雪初霁","flowerName":"腊梅","season":"仲秋","vesselDesc":"折腊梅枝三茎，插于胆瓶。小雪清供，暗香盈室。","child":"j_小雪_child_梅骨朵童子.webp","solarDate":"11月22-23日","herb":"j_小雪_herb_腊梅.webp","title":"腌菜·折梅","volume":5,"threeHou":[{"no":"一","name":"虹藏不见","note":"阴阳交才有虹，此时阴盛阳伏，故虹藏。"},{"no":"二","name":"天气上升地气下降","note":"阳气上升，阴气下降，天地不通，生机不遂。"},{"no":"三","name":"闭塞而成冬","note":"天地闭塞，万物伏藏，进入严冬。"}],"vessel":"j_小雪_obj_腊梅枝.webp","ritualLabel":"折梅仪式","ritualHint":"点击屏幕 7 次 · 折梅入瓶","fx":{"p1":"fx_小雪_01_细雪.webp","p2":"fx_小雪_02_寒梅微光.webp"},"bg":"j_小雪_bg.webp","name":"小雪","vesselName":"腊梅枝","poem":{"text":"夜雪初霁，晨起开门，四山皓然。","author":"陆游《夜雪初霁》"},"ritualQuote":"暗香浮动，小雪清供","pinyin":"Xiǎoxuě","pheno":{"sprout":"j_小雪_pheno_sprout.webp","shoot":"j_小雪_pheno_shoot.webp","bloom":"j_小雪_pheno_bloom.webp","store":"j_小雪_pheno_store.webp"},"ritualType":"plum","flower":"j_小雪_flower_腊梅.webp","herbDesc":"蜡梅科蜡梅的花蕾，解暑生津、顺气止咳。","id":"xiaoxue","flowerDesc":"小雪三候花信：腊梅、山茶、水仙。","month":"十月中","ritualAction":"点击屏幕 7 次折梅入瓶","herbName":"腊梅","desc":"小雪，十月中。雨下而为寒气所薄，故凝而为雪，小者未盛之辞。"},{"en":"DAXUE","quote":"千山鸟飞绝，万径人踪灭","flowerName":"红梅","season":"季冬","vesselDesc":"大雪腌肉，盐酒香料腌制后风干。传统年节储备。","child":"j_大雪_child_鹤羽童子.webp","solarDate":"12月6-8日","herb":"j_大雪_herb_肉苁蓉.webp","title":"腌肉·观鹳","volume":6,"threeHou":[{"no":"一","name":"鹖鴠不鸣","note":"寒号鸟不再鸣叫。"},{"no":"二","name":"虎始交","note":"老虎开始求偶。"},{"no":"三","name":"荔挺出","note":"兰草之一种马兰开始抽出新芽。"}],"vessel":"j_大雪_obj_腌肉.webp","ritualLabel":"观鹳仪式","ritualHint":"点击屏幕 7 次 · 观鹳列阵","fx":{"p1":"fx_大雪_01_飞雪斜飘.webp","p2":"fx_大雪_02_鹤影远去.webp"},"bg":"j_大雪_bg.webp","name":"大雪","vesselName":"腌肉","poem":{"text":"千山鸟飞绝，万径人踪灭。孤舟蓑笠翁，独钓寒江雪。","author":"柳宗元《江雪》"},"ritualQuote":"寒江独钓，雪中孤鹤","pinyin":"Dàxuě","pheno":{"sprout":"j_大雪_pheno_sprout.webp","shoot":"j_大雪_pheno_shoot.webp","bloom":"j_大雪_pheno_bloom.webp","store":"j_大雪_pheno_store.webp"},"ritualType":"crane","flower":"j_大雪_flower_红梅.webp","herbDesc":"列当科肉苁蓉的带鳞叶肉质茎，补肾阳、益精血。","id":"daxue","flowerDesc":"大雪三候花信：红梅、山茶、枇杷。","month":"十一月节","ritualAction":"点击屏幕 7 次集齐鹳阵","herbName":"肉苁蓉","desc":"大雪，十一月节。大者，盛也。至此而雪盛矣。"},{"en":"DONGZHI","quote":"天时人事日相催，冬至阳生春又来","flowerName":"水仙","season":"季冬","vesselDesc":"冬至写九所用。笔锋尖锐，最宜书写消寒图。","child":"j_冬至_child_饺耳童子.webp","solarDate":"12月21-23日","herb":"j_冬至_herb_当归.webp","title":"祭祖·写九","volume":6,"threeHou":[{"no":"一","name":"蚯蚓结","note":"蚯蚓仍蜷缩身体。"},{"no":"二","name":"糜角解","note":"麋鹿角脱落。"},{"no":"三","name":"水泉动","note":"山泉开始流动。"}],"vessel":"j_冬至_obj_狼毫笔.webp","ritualLabel":"写九仪式","ritualHint":"点击屏幕 · 长按 2 秒写九","fx":{"p1":"fx_冬至_01_暖窗红光.webp","p2":"fx_冬至_02_长影.webp"},"bg":"j_冬至_bg.webp","name":"冬至","vesselName":"狼毫笔","poem":{"text":"天时人事日相催，冬至阳生春又来。刺绣五纹添弱线，吹葭六琯动浮灰。","author":"杜甫《小至》"},"ritualQuote":"一阳初生，万物待苏","pinyin":"Dōngzhì","pheno":{"sprout":"j_冬至_pheno_sprout.webp","shoot":"j_冬至_pheno_shoot.webp","bloom":"j_冬至_pheno_bloom.webp","store":"j_冬至_pheno_store.webp"},"ritualType":"write","flower":"j_冬至_flower_水仙.webp","herbDesc":"伞形科当归的根，补血活血、调经止痛。冬至进补首选。","id":"dongzhi","flowerDesc":"冬至三候花信：水仙、腊梅、山茶。","month":"十一月中","ritualAction":"点击触发，长按 2 秒写九","herbName":"当归","desc":"冬至，十一月中。日光至南，昼短夜长，日影最长。"},{"en":"XIAOHAN","quote":"墙角数枝梅，凌寒独自开","flowerName":"山茶","season":"季冬","vesselDesc":"徽州古法所制之墨，金字镌刻。小寒画梅，墨色浓淡自宜。","child":"j_小寒_child_红梅童子.webp","solarDate":"1月5-7日","herb":"j_小寒_herb_山茱萸.webp","title":"画图·数九","volume":6,"threeHou":[{"no":"一","name":"雁北乡","note":"大雁开始向北迁移。"},{"no":"二","name":"鹊始巢","note":"喜鹊开始筑巢。"},{"no":"三","name":"雉始雊","note":"野鸡开始鸣叫。"}],"vessel":"j_小寒_obj_徽墨.webp","ritualLabel":"画图仪式","ritualHint":"点击屏幕 · 长按 2 秒画梅","fx":{"p1":"fx_小寒_01_冰裂纹.webp","p2":"fx_小寒_02_梅影灯晕.webp"},"bg":"j_小寒_bg.webp","name":"小寒","vesselName":"徽墨","poem":{"text":"墙角数枝梅，凌寒独自开。遥知不是雪，为有暗香来。","author":"王安石《梅花》"},"ritualQuote":"梅开小寒，墨色华滋","pinyin":"Xiǎohán","pheno":{"sprout":"j_小寒_pheno_sprout.webp","shoot":"j_小寒_pheno_shoot.webp","bloom":"j_小寒_pheno_bloom.webp","store":"j_小寒_pheno_store.webp"},"ritualType":"paint","flower":"j_小寒_flower_山茶.webp","herbDesc":"山茱萸科山茱萸的成熟果肉，补益肝肾、收敛固涩。","id":"xiaohan","flowerDesc":"小寒三候花信：梅、山茶、水仙。","month":"十二月节","ritualAction":"点击触发，长按 2 秒画梅枝","herbName":"山茱萸","desc":"小寒，十二月节。月初寒尚小，故云，月半则大矣。"},{"en":"DAHAN","quote":"旧雪未及消，新雪又拥户","flowerName":"瑞香","season":"季冬","vesselDesc":"大红丝绸、鎏金穗子。大寒将至，新年将临，悬灯祈福。","child":"j_大寒_child_红灯童子.webp","solarDate":"1月20-21日","herb":"j_大寒_herb_腊八料.webp","title":"守岁·围炉·收卷","volume":6,"threeHou":[{"no":"一","name":"鸡始乳","note":"鸡开始孵化小鸡。"},{"no":"二","name":"征鸟厉疾","note":"鹰隼等征鸟处于迅猛捕食的状态。"},{"no":"三","name":"水泽腹坚","note":"水域中的冰一直冻到水中央，又厚又结实。"}],"vessel":"j_大寒_obj_红灯笼.webp","ritualLabel":"守岁仪式","ritualHint":"长按屏幕 5 秒 · 守岁收卷","fx":{"p1":"fx_大寒_01_红灯笼影.webp","p2":"fx_大寒_02_雪夜昏光.webp"},"bg":"j_大寒_bg.webp","name":"大寒","vesselName":"红灯笼","poem":{"text":"旧雪未及消，新雪又拥户。阶前冻银床，檐头冰钟乳。","author":"陆游《大寒出江陵西门》"},"ritualQuote":"岁时报恩，二十四节气礼成","pinyin":"Dàhán","pheno":{"sprout":"j_大寒_pheno_sprout.webp","shoot":"j_大寒_pheno_shoot.webp","bloom":"j_大寒_pheno_bloom.webp","store":"j_大寒_pheno_store.webp"},"ritualType":"countdown","flower":"j_大寒_flower_瑞香.webp","herbDesc":"腊八粥之八种谷物果品：糯米、红豆、桂圆、红枣、花生、莲子、枸杞、红糖。","id":"dahan","flowerDesc":"大寒三候花信：瑞香、梅花、山茶。","month":"十二月中","ritualAction":"长按屏幕 5 秒完成守岁，物候总卷轴展开","herbName":"腊八料","desc":"大寒，十二月中。寒气之逆极，故谓大寒。"}]};
+const SAVE_KEY = "jiexu-24terms-v1";
+const TOTAL_POURS = 7;
+const TOTAL_BEATS = 30;
+const POUR_HOLD_MS = 800;
+
+const $ = (s, root=document) => root.querySelector(s);
+const $$ = (s, root=document) => Array.from(root.querySelectorAll(s));
+
+const state = {
+  scene: 'intro',
+  termId: 'lichun',
+  phase: 0,
+  ritualStep: 0,
+  muted: false,
+};
+
+const scenes = {
+  intro: $('#introScene'),
+  volume: $('#volumeScene'),
+  archive: $('#archiveScene'),
+  ritual: $('#ritualScene'),
+  detail: $('#archiveDetailScene'),
+};
+
+const PHASE_LABELS = ['萌', '抽', '盈', '藏'];
+const PHASE_NAMES  = ['万物始动', '抽条拔节', '物华丰盈', '蛰伏归藏'];
+
+/* ---------- 数据：节气元数据 ---------- */
+let DATA = null;
+let TERMS = [];
+let VOLUMES = [];
+
+// 直接使用内联数据，避免 file:// 协议下 fetch 被 CORS 阻止
+DATA = INLINE_DATA;
+VOLUMES = DATA.VOLUMES;
+TERMS = DATA.TERMS;
+console.log('[INFO] 数据加载完成（内联） · 节气数=', TERMS.length, ' · 卷数=', VOLUMES.length);
+
+// 占位函数（保留接口，未来如需从 data/terms.json 加载可启用）
+async function loadData(){ return DATA; }
+
+/* ---------- 工具：取当前节气 ---------- */
+function currentTerm(){ return TERMS.find(t => t.id === state.termId) || TERMS[0]; }
+function currentVolume(){
+  const t = currentTerm();
+  return VOLUMES.find(v => v.id === t.volume) || VOLUMES[0];
+}
+function nextTerm(){
+  const idx = TERMS.findIndex(t => t.id === state.termId);
+  if (idx < 0 || idx >= TERMS.length - 1) return null;
+  return TERMS[idx + 1];
+}
+
+/* ---------- Canvas 粒子：落英 ---------- */
+function makePetalField(canvas, opts={}){
+  const cfg = { count: 14, colors: ['#e8c8a8','#e6b86e','#f0d4a4','#d8a868','#c9a857'], alpha: 0.6, speed: 1, ...opts };
+  const ctx = canvas.getContext('2d');
+  let petals = [];
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  function resize(){
+    const r = canvas.getBoundingClientRect();
+    canvas.width = r.width * dpr;
+    canvas.height = r.height * dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  resize();
+  window.addEventListener('resize', resize);
+  for (let i = 0; i < cfg.count; i++) petals.push(spawn(true));
+  function spawn(initial=false){
+    return {
+      x: Math.random()*canvas.width/dpr,
+      y: initial ? Math.random()*canvas.height/dpr : -10,
+      vx: (Math.random()-.5)*0.5,
+      vy: 0.4+Math.random()*0.7*cfg.speed,
+      size: 2.5+Math.random()*4.5,
+      rot: Math.random()*Math.PI*2,
+      vrot: (Math.random()-.5)*0.025,
+      color: cfg.colors[Math.floor(Math.random()*cfg.colors.length)],
+      alpha: 0.4+Math.random()*cfg.alpha,
+    };
+  }
+  let last = 0;
+  function tick(t){
+    if (t - last > 28){
+      last = t;
+      const w = canvas.width/dpr, h = canvas.height/dpr;
+      ctx.clearRect(0,0,w,h);
+      petals.forEach(p => {
+        p.x += p.vx; p.y += p.vy; p.rot += p.vrot;
+        if (p.y > h + 8) Object.assign(p, spawn(false));
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.globalAlpha = p.alpha;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.ellipse(0,0, p.size, p.size*0.55, 0, 0, Math.PI*2);
+        ctx.fill();
+        ctx.globalAlpha = p.alpha*0.5;
+        ctx.beginPath();
+        ctx.ellipse(0,0, p.size*0.5, p.size*0.7, Math.PI/2, 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
+      });
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+/* ---------- 场景切换 ---------- */
+function goto(name){
+  Object.entries(scenes).forEach(([k, el]) => { if (el) el.hidden = (k !== name); });
+  state.scene = name;
+  updateStatus();
+  save();
+}
+
+/* ---------- 顶部条：更新节序名 ---------- */
+function updateTopbar(){
+  const t = currentTerm();
+  const v = currentVolume();
+  const idx = TERMS.findIndex(x => x.id === t.id);
+  $('#chapterNo').textContent = String(idx + 1).padStart(2, '0');
+  $('#chapterName').textContent = `${t.name} · ${t.title}`;
+}
+
+/* ---------- 状态条 ---------- */
+function updateStatus(){
+  $$('.status-cell').forEach((c, i) => {
+    c.classList.toggle('active', i === state.phase);
+    c.classList.toggle('passed', i < state.phase);
+  });
+  const phase = state.phase;
+  const pct = Math.min(100, Math.round((phase + 1) * 25));
+  $('#pctText').textContent = pct + '%';
+  const step = phase < 4 ? `第 ${phase + 1} 步 · ${PHASE_LABELS[phase]}` : '完 成';
+  $('#statusDetail .step').textContent = step + ' / 共 4 步';
+}
+
+/* ---------- Web Audio ---------- */
+let audioCtx = null;
+let muted = false;
+function ensureAudio(){
+  if (audioCtx) return;
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 4, audioCtx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i=0; i<d.length; i++) d[i] = (Math.random()*2-1) * 0.04;
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf; src.loop = true;
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass'; filter.frequency.value = 280;
+    src.connect(filter).connect(audioCtx.destination);
+    src.start();
+  } catch(e){ console.warn('audio:', e) }
+}
+function beep(freq=440, dur=0.08, type='sine', vol=0.06){
+  if (muted || !audioCtx) return;
+  try {
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(0, audioCtx.currentTime);
+    g.gain.linearRampToValueAtTime(vol, audioCtx.currentTime + 0.01);
+    g.gain.linearRampToValueAtTime(0, audioCtx.currentTime + dur);
+    o.connect(g).connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime + dur);
+  } catch{}
+}
+function gong(){
+  if (muted || !audioCtx) return;
+  [523, 659, 784].forEach((f, i) => setTimeout(() => beep(f, 1.2, 'sine', 0.06), i*150));
+}
+
+/* ---------- 资产预载 ---------- */
+function getAssetUrl(path){ return 'webp/' + path; }
+
+function preloadAssets(callback){
+  const urls = [
+    ...VOLUMES.map(v => v.keyvisual),
+    ...TERMS.flatMap(t => [t.bg, t.child, t.herb, t.vessel, t.flower, t.pheno.sprout, t.pheno.shoot, t.pheno.bloom, t.pheno.store, t.fx.p1, t.fx.p2])
+  ];
+  let loaded = 0;
+  let resolved = false;
+  const startBtn = $('#startBtn');
+
+  // 数据已内联（INLINE_DATA），按钮立即可点
+  startBtn.disabled = false;
+  startBtn.querySelector('span').textContent = '进 入 节 序';
+
+  function finish(){
+    if (resolved) return;
+    resolved = true;
+    startBtn.disabled = false;
+    startBtn.querySelector('span').textContent = '进 入 节 序';
+    callback && callback();
+  }
+  function onLoad(){
+    loaded++;
+    // 仅做进度日志，不阻塞按钮（数据已就绪）
+    if (loaded % 12 === 0 || loaded === urls.length) {
+      console.log(`[PRELOAD] ${loaded}/${urls.length}`);
+    }
+  }
+  urls.forEach(u => {
+    const img = new Image();
+    img.onload = onLoad;
+    img.onerror = onLoad;
+    img.src = getAssetUrl(u);
+  });
+  // 兜底：无论图片是否加载完，按钮都已可用
+  setTimeout(finish, 100);
+}
+
+/* ---------- 存档 ---------- */
+function save(){ try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch{} }
+function load(){
+  try { const raw = localStorage.getItem(SAVE_KEY); return raw ? JSON.parse(raw) : null; }
+  catch { return null; }
+}
+
+/* ---------- 顶部按钮 ---------- */
+$('#muteBtn').addEventListener('click', () => {
+  muted = !muted; state.muted = muted; save();
+  $('#muteBtn').innerHTML = muted
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5L6 9H2v6h4l5 4V5zM23 9l-6 6M17 9l6 6"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5L6 9H2v6h4l5 4V5zM15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14"/></svg>';
+});
+$('#restartBtn').addEventListener('click', () => {
+  if (confirm('重 新 开 始 ？将清空当前进度。')){
+    localStorage.removeItem(SAVE_KEY);
+    Object.assign(state, { scene:'intro', termId:'lichun', phase:0, ritualStep:0 });
+    location.reload();
+  }
+});
+
+/* ---------- 封面：二十四节气快选 ---------- */
+function buildTermTiles(){
+  // 1. 卷轴横向时间轴
+  const rail = $('#volumeRail');
+  if (rail){
+    rail.innerHTML = '';
+    VOLUMES.forEach((v, idx) => {
+      const node = document.createElement('div');
+      node.className = 'volume-node';
+      node.dataset.volume = v.id;
+      node.style.setProperty('--accent', v.accent || '#e8c874');
+      node.innerHTML = `
+        <span class="volume-node-tag">卷 ${romanize(idx + 1)}</span>
+        <span class="volume-node-dot"></span>
+        <span class="volume-node-name">${v.name}</span>
+        <span class="volume-node-en">${v.en}</span>
+      `;
+      node.addEventListener('click', () => {
+        const firstTerm = TERMS.find(t => t.volume === v.id);
+        if (firstTerm){
+          state.termId = firstTerm.id;
+          state.phase = 0;
+          state.ritualStep = 0;
+          updateTopbar();
+          updateStatus();
+          startVolume();
+        }
+      });
+      // 悬浮该卷时高亮该卷所有节气卡
+      node.addEventListener('mouseenter', () => {
+        $$('.scroll-card').forEach(c => {
+          if (Number(c.dataset.volume) === v.id){
+            c.style.borderColor = v.accent;
+            c.style.boxShadow = '0 0 0 1px ' + v.accent + ', 0 8px 24px -8px rgba(0,0,0,.7)';
+          }
+        });
+      });
+      node.addEventListener('mouseleave', () => {
+        $$('.scroll-card').forEach(c => {
+          if (Number(c.dataset.volume) === v.id){
+            c.style.borderColor = '';
+            c.style.boxShadow = '';
+          }
+        });
+      });
+      rail.appendChild(node);
+    });
+  }
+
+  // 2. 二十四节气手卷
+  const track = $('#scrollTrack');
+  if (!track) return;
+  track.innerHTML = '';
+
+  // 按卷分组渲染，每卷之间插入一个卷名分隔条
+  let lastVolume = null;
+  TERMS.forEach((t, idx) => {
+    if (t.volume !== lastVolume){
+      if (lastVolume !== null){
+        const sep = document.createElement('div');
+        sep.className = 'volume-sep';
+        const v = VOLUMES.find(vv => vv.id === t.volume);
+        sep.innerHTML = `
+          <div class="volume-sep-line"></div>
+          <div class="volume-sep-label">${v ? v.name : ''}</div>
+          <div class="volume-sep-en">${v ? v.en : ''}</div>
+          <div class="volume-sep-line"></div>
+        `;
+        track.appendChild(sep);
+      }
+      lastVolume = t.volume;
+    }
+    const card = document.createElement('article');
+    card.className = 'scroll-card';
+    card.dataset.id = t.id;
+    card.dataset.volume = t.volume;
+    const vol = VOLUMES.find(v => v.id === t.volume);
+    card.style.setProperty('--accent', vol ? vol.accent : '#e8c874');
+    // 新设计：顶部候次小印 / 中段（图+竖排题签） / 底注脚 / 礼成印
+    card.innerHTML = `
+      <div class="scroll-card-head">
+        <span class="scroll-card-no">第 ${numToCN(idx + 1)} 候</span>
+        <span class="scroll-card-pinyin">${t.pinyin || t.en}</span>
+      </div>
+      <div class="scroll-card-mid">
+        <div class="scroll-card-img">
+          <img loading="lazy" src="${getAssetUrl(t.child)}" alt="${t.name}">
+        </div>
+        <div class="scroll-card-name">
+          <span class="scroll-card-name-char">${nameChars(t.name)}</span>
+        </div>
+      </div>
+      <div class="scroll-card-meta">
+        <div class="scroll-card-month">${t.month} · ${t.solarDate}</div>
+        <div class="scroll-card-tag">${t.ritualLabel || ''}</div>
+      </div>
+      <span class="scroll-card-seal">礼<br>成</span>
+    `;
+    card.addEventListener('click', () => {
+      state.termId = t.id;
+      state.phase = 0;
+      state.ritualStep = 0;
+      updateTopbar();
+      updateStatus();
+      startVolume();
+    });
+    if (vol){
+      card.addEventListener('mouseenter', () => {
+        card.style.borderColor = vol.accent;
+      });
+      card.addEventListener('mouseleave', () => {
+        card.style.borderColor = '';
+      });
+    }
+    track.appendChild(card);
+  });
+}
+
+// 数字转罗马
+function romanize(n){
+  const map = [['M',1000],['CM',900],['D',500],['CD',400],['C',100],['XC',90],['L',50],['XL',40],['X',10],['IX',9],['V',5],['IV',4],['I',1]];
+  let s = '';
+  for (const [r,v] of map){ while (n >= v){ s += r; n -= v; } }
+  return s;
+}
+
+// 1-24 转中文序号
+function numToCN(n){
+  const tens = ['','十','廿','卅'];
+  const ones = ['','一','二','三','四','五','六','七','八','九'];
+  if (n <= 10) return ones[n];
+  const t = Math.floor(n / 10), o = n % 10;
+  return tens[t] + (o ? ones[o] : '');
+}
+
+// 将 2 字节气名转成每个 char 一个 span（用于竖排）
+function nameChars(name){
+  return Array.from(name).map(ch => `<span style="display:inline-block">${ch}</span>`).join('');
+}
+
+/* ---------- 启动：开始节序 ---------- */
+function startBegin(){
+  ensureAudio();
+  state.termId = 'lichun';
+  state.phase = 0;
+  state.ritualStep = 0;
+  updateTopbar();
+  updateStatus();
+  startVolume();
+}
+
+/* ---------- 卷首过场 ---------- */
+function startVolume(){
+  const v = currentVolume();
+  goto('volume');
+  $('#volumeKv').src = getAssetUrl(v.keyvisual);
+  $('#volumeName').textContent = v.name;
+  $('#volumeEn').textContent = v.en;
+  $('#volumeSeal').textContent = '卷 ' + ['一','二','三','四','五','六'][v.id - 1];
+  const term = currentTerm();
+  $('#volumeQuote').textContent = term.quote;
+  gsap.fromTo('#volumeName', { autoAlpha: 0, y: 30 }, { autoAlpha: 1, y: 0, duration: 1.2, ease: 'power2.out', delay: 0.3 });
+  gsap.fromTo('#volumeEn', { autoAlpha: 0, y: 20 }, { autoAlpha: 1, y: 0, duration: 1.0, ease: 'power2.out', delay: 0.7 });
+  gsap.fromTo('#volumeSeal', { autoAlpha: 0, scale: 0.8 }, { autoAlpha: 1, scale: 1, duration: 0.8, ease: 'back.out(1.7)', delay: 1.1 });
+  gsap.fromTo('#volumeQuote', { autoAlpha: 0, y: 20 }, { autoAlpha: 1, y: 0, duration: 1.2, ease: 'power2.out', delay: 1.5 });
+  gsap.fromTo('#volumeHint', { autoAlpha: 0 }, { autoAlpha: 1, duration: 1, delay: 2.5 });
+  beep(440, 0.5, 'sine', 0.04);
+  // 用属性挂载，确保多次进入时只有最新 handler 触发
+  const scene = $('#volumeScene');
+  if (scene._handler) scene.removeEventListener('click', scene._handler);
+  const handler = () => {
+    scene.removeEventListener('click', handler);
+    scene._handler = null;
+    gsap.to('#volumeName, #volumeEn, #volumeSeal, #volumeQuote, #volumeHint', { autoAlpha: 0, duration: 0.4 });
+    setTimeout(() => startScrollSequence(), 400);
+  };
+  scene._handler = handler;
+  scene.addEventListener('click', handler);
+}
+
+/* ---------- 序章：卷轴展开 ---------- */
+let _scrollAutoTimer = 0;
+function startScrollSequence(){
+  goto('archive');
+  const t = currentTerm();
+  const v = currentVolume();
+  state.phase = 0; updateStatus();
+
+  $('#archiveBg').src = getAssetUrl(t.bg);
+  $('#scrollKicker').textContent = `第 ${['一','二','三','四','五','六'][v.id - 1]} 卷 · ${v.name}`;
+  $('#scrollTitle').textContent = t.name;
+  $('#scrollEn').textContent = `${t.en} · ${t.title}`;
+  $('#scrollQuote').textContent = t.quote;
+  $('#scrollDesc').textContent = t.desc;
+
+  const paper = $('#scrollPaper');
+  const axisL = $('#axisL');
+  const axisR = $('#axisR');
+
+  // 卷轴纸从中央展开
+  gsap.fromTo(paper, { scaleY: 0, opacity: 0 },
+    { scaleY: 1, opacity: 1, duration: 1.4, ease: 'power3.inOut',
+      onStart: () => paper.classList.remove('closed'),
+    });
+  gsap.fromTo(axisL, { x: -60, opacity: 0 },
+    { x: 0, opacity: 1, duration: 1.4, ease: 'power3.inOut', delay: 0.1 });
+  gsap.fromTo(axisR, { x: 60, opacity: 0 },
+    { x: 0, opacity: 1, duration: 1.4, ease: 'power3.inOut', delay: 0.1 });
+
+  const stagger = [
+    { sel: '.scroll-paper .kicker', delay: 0.7 },
+    { sel: '.scroll-paper .main-title', delay: 0.85 },
+    { sel: '.scroll-paper .en', delay: 1.0 },
+    { sel: '.scroll-paper .quote', delay: 1.2 },
+    { sel: '.scroll-paper .desc', delay: 1.5 },
+    { sel: '.scroll-paper .seal', delay: 1.9 },
+  ];
+  stagger.forEach(({ sel, delay }) => {
+    gsap.from(sel, { opacity: 0, y: 12, duration: 0.6, ease: 'power2.out', delay });
+  });
+
+  beep(440, 0.5, 'sine', 0.04);
+  showQuoteToast(t.quote, 3500);
+
+  // CTA 按钮显形 + 允许点击跳过（用属性追踪避免重复绑定）
+  const scene = $('#archiveScene');
+  if (scene._archHandler) scene.removeEventListener('pointerdown', scene._archHandler);
+  const cta = $('#scrollCta');
+  if (cta){
+    if (cta._ctaHandler) cta.removeEventListener('pointerdown', cta._ctaHandler);
+    gsap.fromTo(cta, { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.5, delay: 2.2 });
+    const goRitual = () => {
+      clearTimeout(_scrollAutoTimer);
+      cta.removeEventListener('pointerdown', cta._ctaHandler);
+      scene.removeEventListener('pointerdown', scene._archHandler);
+      gsap.to('#archiveScene *', { opacity: 0, duration: 0.3 });
+      setTimeout(() => startRitual(), 280);
+    };
+    cta._ctaHandler = goRitual;
+    scene._archHandler = goRitual;
+    cta.addEventListener('pointerdown', goRitual);
+    scene.addEventListener('pointerdown', goRitual);
+  }
+
+  // 兜底：4.5s 自动进入仪式（防止 CTA 失灵）
+  clearTimeout(_scrollAutoTimer);
+  _scrollAutoTimer = setTimeout(() => startRitual(), 4500);
+}
+
+/* ---------- 仪式引擎：24 节气 × 24 种差异化玩法 ---------- */
+const DYN = $('#dynamicLayer');
+const STAGE = $('#ritualScene');
+// 跟踪每个仪式添加的监听器，启动新仪式前清掉旧的
+const _stageHandlers = [];
+function trackedListener(node, evt, fn, opts){
+  // 直接调用原生方法，避免 monkey-patch 后的递归
+  EventTarget.prototype.addEventListener.call(node, evt, fn, opts);
+  _stageHandlers.push({node, evt, fn, opts});
+}
+function clearStageHandlers(){
+  while (_stageHandlers.length){
+    const h = _stageHandlers.pop();
+    try { EventTarget.prototype.removeEventListener.call(h.node, h.evt, h.fn, h.opts); } catch{}
+  }
+}
+function clearDyn(){
+  clearStageHandlers();
+  // 清掉 beatZone 上可能的旧监听器（重置为干净状态）
+  const bz = $('#beatZone');
+  if (bz){
+    const clone = bz.cloneNode(true);
+    bz.parentNode.replaceChild(clone, bz);
+  }
+  if (DYN) DYN.innerHTML = '';
+}
+function lockVessel(){
+  const v = $('#vessel'); if(!v) return;
+  v.style.pointerEvents = 'none'; v.style.opacity = '0.55';
+}
+function unlockVessel(){
+  const v = $('#vessel'); if(!v) return;
+  v.style.pointerEvents = ''; v.style.opacity = '';
+}
+
+/* ---------- 通用反馈工具（被各仪式调用） ---------- */
+function spawnSteam(){
+  const stack = $('#steamStack'); if(!stack) return;
+  const puff = document.createElement('div');
+  puff.className = 'steam-puff show';
+  puff.style.left = (40 + Math.random() * 20) + '%';
+  stack.appendChild(puff);
+  setTimeout(() => puff.remove(), 2600);
+}
+function showSteamResidue(){
+  const r = $('#steamResidue'); if(r) r.classList.add('show');
+}
+function spawnWaterMark(){
+  const m = $('#waterMark'); if(!m) return;
+  m.classList.remove('show'); void m.offsetWidth; m.classList.add('show');
+  setTimeout(() => m.classList.remove('show'), 1500);
+}
+function bowlShake(){
+  const v = $('#vessel'); if(!v || typeof gsap === 'undefined') return;
+  gsap.fromTo(v, { x: 0 }, { x: 4, duration: 0.06, yoyo: true, repeat: 5, ease: 'power1.inOut',
+    onComplete: () => gsap.to(v, { x: 0, duration: 0.1 }) });
+}
+function showRipple(target){
+  if(!target || !$('.shell')) return;
+  const r = target.getBoundingClientRect();
+  const shellR = $('.shell').getBoundingClientRect();
+  const ripple = document.createElement('div');
+  ripple.style.cssText = `
+    position:absolute;left:${r.left - shellR.left + r.width/2 - 18}px;top:${r.top - shellR.top + r.height/2 - 18}px;
+    width:36px;height:36px;border:1.5px solid rgba(232,200,116,.7);border-radius:50%;
+    z-index:11;pointer-events:none;
+  `;
+  $('.shell').appendChild(ripple);
+  if(typeof gsap !== 'undefined'){
+    gsap.fromTo(ripple, { scale: 0.4, opacity: 1 },
+      { scale: 2.8, opacity: 0, duration: 0.9, ease: 'power2.out',
+        onComplete: () => ripple.remove() });
+  } else {
+    setTimeout(() => ripple.remove(), 900);
+  }
+}
+function showQuoteToast(text, dur){
+  dur = dur || 2400;
+  const el = $('#quoteToast'); if(!el) return;
+  el.textContent = text;
+  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), dur);
+}
+function showPourToast(count){
+  const el = $('#pourToast'); if(!el) return;
+  el.textContent = '第 ' + count + ' 次 注 汤 ✓';
+  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 1200);
+}
+function showTapHalo(){
+  const h = $('#tapHalo'), v = $('#vessel'), s = $('.shell');
+  if(!h || !v || !s) return;
+  const r = v.getBoundingClientRect(), sr = s.getBoundingClientRect();
+  h.style.left = (r.left - sr.left + r.width/2 - 32) + 'px';
+  h.style.top = (r.top - sr.top + r.height/2 - 32) + 'px';
+  h.style.display = 'block';
+}
+function hideTapHalo(){
+  const h = $('#tapHalo'); if(h) h.style.display = 'none';
+}
+function taskHintUpdate(text, cls){
+  cls = cls || '';
+  const el = $('#taskHint'); if(!el) return;
+  el.innerHTML = text;
+  el.className = 'task-hint ' + cls;
+}
+function dyn(tag, cls, html){
+  const el = document.createElement(tag);
+  if (cls) el.className = cls;
+  if (html != null) el.innerHTML = html;
+  DYN.appendChild(el); return el;
+}
+function holdTap(node, onStart, onProgress, onComplete, onCancel, holdMs){
+  holdMs = holdMs || 1500;
+  let downT = 0, raf = 0, canceled = false, pointerId = null, finished = false;
+  function down(e){
+    if (e && typeof e.pointerId === 'number'){
+      pointerId = e.pointerId;
+      try { node.setPointerCapture && node.setPointerCapture(pointerId); } catch{}
+    }
+    canceled = false; finished = false; downT = performance.now();
+    onStart && onStart(e);
+    function step(){
+      if (canceled) return;
+      const t = Math.min(1, (performance.now() - downT) / holdMs);
+      onProgress && onProgress(t);
+      if (t < 1) raf = requestAnimationFrame(step);
+    }
+    raf = requestAnimationFrame(step);
+  }
+  function up(e){
+    if (e && typeof pointerId === 'number' && e.pointerId !== pointerId) return;
+    if (finished) return;
+    finished = true;
+    const dur = performance.now() - downT;
+    cancelAnimationFrame(raf);
+    if (dur >= holdMs * 0.85){ onComplete && onComplete(); }
+    else { canceled = true; onCancel && onCancel(); }
+  }
+  node.addEventListener('pointerdown', down);
+  node.addEventListener('pointerup', up);
+  node.addEventListener('pointercancel', up);
+}
+
+/* ===== 1. 立春 · 点茶仪式 ===== */
+function playTea(term){
+  lockVessel();
+  const v = $('#vessel'); v.classList.add('pouring','idle');
+  const sg = $('#sage'); sg.classList.add('idle');
+  $('#pourProgress').classList.add('show');
+  $('#pourCounter').classList.add('show');
+  $('#pourNum').textContent = '0';
+  taskHintUpdate(`${term.ritualHint}（0/${TOTAL_POURS}）`, '');
+
+  let bowlHoldRaf = 0;
+  function doPour(){
+    state.ritualStep++; save(); updateStatus();
+    const num = $('#pourNum');
+    num.textContent = state.ritualStep;
+    num.classList.remove('bump'); void num.offsetWidth; num.classList.add('bump');
+    beep(659,0.06,'sine',0.04); beep(880,0.08,'sine',0.04);
+    spawnSteam(); spawnWaterMark();
+    showPourToast(state.ritualStep);
+    if (state.ritualStep===3||state.ritualStep===5||state.ritualStep===7) showQuoteToast(term.quote,2400);
+    if (state.ritualStep >= TOTAL_POURS){
+      sg.classList.remove('idle'); sg.classList.add('celebrate');
+      showSteamResidue();
+      setTimeout(()=>playTeaBeat(term),800);
+    } else {
+      const f = $('#pourFill');
+      f.style.transition='stroke-dashoffset .3s ease';
+      f.style.strokeDashoffset='176';
+      setTimeout(()=>{f.style.transition='stroke-dashoffset 0.8s linear';f.style.strokeDashoffset='176';},200);
+      taskHintUpdate(`${term.ritualHint}（${state.ritualStep}/${TOTAL_POURS}）`,'');
+    }
+  }
+  function startHold(){ v.classList.add('pouring');
+    const f = $('#pourFill'); f.style.transition='stroke-dashoffset 0.8s linear'; f.style.strokeDashoffset='176';
+    const startT = performance.now();
+    function step(){
+      const t = Math.min(1,(performance.now()-startT)/POUR_HOLD_MS);
+      f.style.strokeDashoffset = 176-176*t;
+      if(t<1) bowlHoldRaf=requestAnimationFrame(step);
+    }
+    bowlHoldRaf=requestAnimationFrame(step);
+  }
+  function cancelHold(){ v.classList.remove('pouring'); v.classList.add('idle');
+    const f = $('#pourFill'); f.style.transition='stroke-dashoffset .2s ease'; f.style.strokeDashoffset='176';
+    setTimeout(()=>{f.style.transition='stroke-dashoffset 0.8s linear';f.style.strokeDashoffset='176';},250);
+  }
+  let wasPouring = false;
+  STAGE.addEventListener('pointerdown', e=>{ wasPouring=false; startHold(); });
+  STAGE.addEventListener('pointerup', e=>{
+    const wp = v.classList.contains('pouring');
+    cancelHold();
+    if(wp) doPour();
+  });
+  STAGE.addEventListener('pointercancel', e=>{ cancelHold(); });
+  showTapHalo();
+}
+function playTeaBeat(term){
+  state.phase=2; updateStatus();
+  $('#pourProgress').classList.remove('show');
+  $('#pourCounter').classList.remove('show');
+  $('#beatZone').style.display='block';
+  $('#beatZone').classList.add('active');
+  $('#beatCounter').classList.add('show');
+  const beatProg = $('#beatProgress'); beatProg.innerHTML='';
+  for(let i=0;i<TOTAL_BEATS;i++){const d=document.createElement('div');d.className='beat-dot';beatProg.appendChild(d);}
+  beatProg.classList.add('show');
+  $('#beatNum').textContent='0';
+  taskHintUpdate(`点 击 鼓 面 · 击 拂（0/${TOTAL_BEATS}）`,'');
+  function onBeat(){
+    if(state.phase!==2) return;
+    const dots=$$('.beat-dot'); const idx=dots.findIndex(d=>!d.classList.contains('done'));
+    if(idx<0) return;
+    dots[idx].classList.add('done');
+    const num=$('#beatNum'); num.textContent=idx+1;
+    num.classList.remove('bump'); void num.offsetWidth; num.classList.add('bump');
+    showRipple($('#beatZone')); beep(880+idx*8,0.04,'triangle',0.04);
+    if(idx+1>=TOTAL_BEATS){$('#beatZone').removeEventListener('pointerdown',onBeat);setTimeout(()=>finishRitual(term),600);}
+  }
+  $('#beatZone').addEventListener('pointerdown',onBeat);
+}
+
+/* ===== 2. 雨水 · 润笔 ===== */
+function playBrush(term){
+  lockVessel();
+  const v=$('#vessel'); v.classList.add('idle');
+  const sg=$('#sage'); sg.classList.add('idle');
+  const canvas=document.createElement('canvas'); canvas.className='brush-canvas';
+  DYN.appendChild(canvas); const ctx=canvas.getContext('2d');
+  function resize(){const r=STAGE.getBoundingClientRect();canvas.width=r.width;canvas.height=r.height;}
+  resize(); window.addEventListener('resize',resize);
+  taskHintUpdate('长 按 屏 幕 · 润 笔 聚 墨', 'tip-light');
+
+  holdTap(STAGE,
+    ()=>{ beep(330,0.08,'sine',0.04); },
+    (t)=>{
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      const cx=canvas.width*0.5, cy=canvas.height*0.6;
+      ctx.strokeStyle=`rgba(245,232,210,${t})`;
+      ctx.lineWidth=8; ctx.lineCap='round';
+      // 画"雨"字
+      ctx.beginPath();
+      ctx.moveTo(cx-50,cy-50); ctx.lineTo(cx+50,cy-50); // 横
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx,cy-50); ctx.lineTo(cx-40,cy+30); // 竖
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx-40,cy+30); ctx.lineTo(cx+30,cy+30); // 折
+      ctx.stroke();
+      taskHintUpdate(`润 笔 · ${Math.round(t*100)}%`, 'tip-light');
+    },
+    ()=>{
+      state.phase=2; updateStatus();
+      const ink=$('#inkText'); ink.textContent='雨 水';
+      ink.classList.remove('show'); void ink.offsetWidth; ink.classList.add('show');
+      setTimeout(()=>finishRitual(term),600);
+    },
+    ()=>{}, 1800
+  );
+}
+
+/* ===== 3. 惊蛰 · 击鼓 ===== */
+function playDrum(term){
+  lockVessel();
+  const v=$('#vessel'); v.classList.add('idle');
+  const sg=$('#sage'); sg.classList.add('idle');
+  const drum=dyn('div','drum-stage');
+  const flash=dyn('div','thunder-flash');
+  for(let i=0;i<7;i++){const d=document.createElement('span');d.className='drum-dot';drum.appendChild(d);}
+  taskHintUpdate('按 节 奏 点 击 鼓 面 · 7 次', 'tip-light');
+  let count=0;
+  const TEMPO_MS=480;
+  function tap(){
+    if(count>=7) return;
+    count++;
+    drum.classList.remove('hit'); void drum.offsetWidth; drum.classList.add('hit');
+    flash.classList.remove('flash'); void flash.offsetWidth; flash.classList.add('flash');
+    showRipple(drum);
+    const freq=(count===7)?260:140;
+    beep(freq,0.10,'triangle',0.06);
+    const dots=drum.querySelectorAll('.drum-dot');
+    if(dots[count-1]) dots[count-1].classList.add('on');
+    taskHintUpdate(`击 鼓 · ${count}/7`, 'tip-light');
+    if(count>=7){
+      drum.removeEventListener('pointerdown',tap);
+      setTimeout(()=>{sg.classList.remove('idle');sg.classList.add('celebrate');flash.classList.add('big');setTimeout(()=>finishRitual(term),800);},500);
+    }
+  }
+  drum.addEventListener('pointerdown',tap);
+}
+
+/* ===== 4. 春分 · 放鸢 ===== */
+function playKite(term){
+  lockVessel();
+  const v=$('#vessel'); v.classList.add('idle');
+  const sg=$('#sage'); sg.classList.add('idle');
+  const stage=dyn('div','kite-stage');
+  const kite=dyn('img','kite-img'); kite.src=getAssetUrl(term.vessel);
+  const line=dyn('div','kite-line');
+  const hint=dyn('div','kite-hint','连 点 7 次 · 纸 鸢 升 空');
+  taskHintUpdate('连 点 7 次 · 纸 鸢 升 空', 'tip-light');
+  let count=0;
+  function tap(){
+    count++;
+    const p=count/7;
+    kite.style.bottom=(p*40+10)+'%';
+    line.style.height=(p*30+5)+'%';
+    hint.textContent=`纸 鸢 升 空 · ${count}/7`;
+    beep(440+count*30,0.05,'sine',0.04);
+    if(count>=7){
+      stage.removeEventListener('pointerdown',tap);
+      hint.textContent='鸢 已 飞 天 · 礼 成';
+      setTimeout(()=>finishRitual(term),700);
+    }
+  }
+  stage.addEventListener('pointerdown',tap);
+}
+
+/* ===== 5. 清明 · 焚香 ===== */
+function playIncense(term){
+  lockVessel();
+  const v=$('#vessel'); v.classList.add('idle');
+  const sg=$('#sage'); sg.classList.add('idle');
+  const stick=dyn('div','incense-stick');
+  const ember=dyn('div','incense-ember');
+  const smoke=dyn('div','smoke-layer');
+  taskHintUpdate('长 按 线 香 · 引 燃 香 烟', 'tip-light');
+  holdTap(stick,
+    ()=>{ ember.classList.add('lit'); beep(280,0.08,'sine',0.05); },
+    (t)=>{ ember.style.setProperty('--p',t); smoke.style.setProperty('--p',t); if(Math.random()<t*0.3) spawnSmoke(); },
+    ()=>{
+      ember.classList.add('full');
+      taskHintUpdate('烟 雨 蒙 罩 · 柳 絮 纷 飞', 'tip-light');
+      state.phase=2; updateStatus();
+      const iv=setInterval(()=>{for(let i=0;i<3;i++) spawnSmoke(); spawnWillow();},120);
+      setTimeout(()=>{clearInterval(iv);sg.classList.remove('idle');sg.classList.add('celebrate');setTimeout(()=>finishRitual(term),800);},2400);
+    },
+    ()=>{ ember.classList.remove('lit'); taskHintUpdate('长 按 线 香', 'tip-light'); },
+    1600
+  );
+  function spawnSmoke(){
+    const s=document.createElement('div');s.className='smoke-puff';
+    s.style.left=(35+Math.random()*30)+'%';
+    smoke.appendChild(s); setTimeout(()=>s.remove(),4000);
+  }
+  function spawnWillow(){
+    const w=document.createElement('div');w.className='willow-flake';
+    w.style.left=(Math.random()*100)+'%';
+    w.style.animationDuration=(4+Math.random()*3)+'s';
+    smoke.appendChild(w); setTimeout(()=>w.remove(),7000);
+  }
+}
+
+/* ===== 6. 谷雨 · 煎茶 ===== */
+function playTeaSelect(term){
+  lockVessel();
+  const v=$('#vessel'); v.classList.add('idle');
+  const sg=$('#sage'); sg.classList.add('idle');
+  const stage=dyn('div','tea-select-stage');
+  const pot=dyn('div','tea-pot');
+  const water=dyn('div','tea-water');
+  for(let i=0;i<3;i++){
+    const f=document.createElement('div');f.className='flower-pick';
+    f.style.left=(15+i*30)+'%';
+    const img=document.createElement('img');img.src=getAssetUrl(term.flower);f.appendChild(img);
+    dyn('div','flower-tray').appendChild(f);
+  }
+  taskHintUpdate('长 按 茶 则 · 煎 茶 注 水', 'tip-light');
+  holdTap(pot,
+    ()=>{ pot.classList.add('pouring'); beep(440,0.06,'sine',0.04); },
+    (t)=>{ water.style.setProperty('--p',t); },
+    ()=>{
+      pot.classList.remove('pouring'); pot.classList.add('done');
+      water.classList.add('full');
+      taskHintUpdate('点 击 三 朵 落 花 · 选 入 茶 中', 'tip-light');
+      let picked=0;
+      $$('.flower-pick').forEach(f=>f.addEventListener('pointerdown',()=>{
+        if(f.classList.contains('picked')) return;
+        f.classList.add('picked'); picked++;
+        beep(700,0.04,'sine',0.04);
+        if(picked>=3) setTimeout(()=>{sg.classList.remove('idle');sg.classList.add('celebrate');setTimeout(()=>finishRitual(term),800);},600);
+      }));
+    },
+    ()=>{ pot.classList.remove('pouring'); taskHintUpdate('长 按 茶 则', 'tip-light'); },
+    1500
+  );
+}
+
+/* ===== 7. 立夏 · 簪花 ===== */
+function playHairpin(term){
+  lockVessel();
+  const v=$('#vessel'); v.classList.add('idle');
+  const sg=$('#sage'); sg.classList.add('idle');
+  const stage=dyn('div','hairpin-stage');
+  taskHintUpdate('连 点 7 处 · 簪 花 入 鬓', 'tip-light');
+  let count=0;
+  function tap(e){
+    count++;
+    const r=stage.getBoundingClientRect();
+    const f=document.createElement('img');f.src=getAssetUrl(term.flower);f.className='hair-flower';
+    f.style.left=(e.clientX-r.left-24)+'px';f.style.top=(e.clientY-r.top-24)+'px';
+    stage.appendChild(f);
+    beep(620+count*30,0.05,'sine',0.04);
+    taskHintUpdate(`簪 花 · ${count}/7`, 'tip-light');
+    if(count>=7){stage.removeEventListener('pointerdown',tap);setTimeout(()=>{sg.classList.remove('idle');sg.classList.add('celebrate');setTimeout(()=>finishRitual(term),800);},400);}
+  }
+  stage.addEventListener('pointerdown',tap);
+}
+
+/* ===== 8. 小满 · 灌浆 ===== */
+function playPour(term){
+  lockVessel();
+  const v=$('#vessel'); v.classList.add('idle');
+  const sg=$('#sage'); sg.classList.add('idle');
+  const stage=dyn('div','pour-stage');
+  const pot=dyn('div','pour-pot');
+  const stream=dyn('div','pour-stream');
+  const ears=dyn('div','pour-ears');
+  for(let i=0;i<7;i++){const e=document.createElement('div');e.className='pour-ear';e.style.left=(10+i*12)+'%';ears.appendChild(e);}
+  taskHintUpdate('长 按 陶 壶 · 灌 浆 麦 穗', 'tip-light');
+  holdTap(pot,
+    ()=>{ pot.classList.add('tilting'); stream.classList.add('flowing'); beep(380,0.06,'sine',0.04); },
+    (t)=>{
+      stream.style.setProperty('--p',t);
+      const ee=ears.querySelectorAll('.pour-ear');
+      const lit=Math.floor(t*7);ee.forEach((e,i)=>e.classList.toggle('lit',i<lit));
+      taskHintUpdate(`灌 浆 · ${Math.round(t*100)}%`, 'tip-light');
+    },
+    ()=>{
+      pot.classList.remove('tilting');pot.classList.add('done');stream.classList.remove('flowing');stream.classList.add('done');
+      ears.classList.add('all-lit');
+      setTimeout(()=>{sg.classList.remove('idle');sg.classList.add('celebrate');setTimeout(()=>finishRitual(term),700);},600);
+    },
+    ()=>{ pot.classList.remove('tilting');stream.classList.remove('flowing'); },
+    2000
+  );
+}
+
+/* ===== 9. 芒种 · 听雨 ===== */
+function playRain(term){
+  lockVessel();
+  const v=$('#vessel'); v.classList.add('idle');
+  const sg=$('#sage'); sg.classList.add('idle');
+  const stage=dyn('div','rain-stage');
+  const drops=dyn('div','rain-drops');
+  taskHintUpdate('连 点 7 次 · 雨 势 渐 强', 'tip-light');
+  let count=0;
+  function tap(){
+    count++;
+    const level=Math.min(4,Math.ceil(count/2));
+    stage.className=`rain-stage level-${level}`;
+    beep(220-level*15,0.06+level*0.02,'sine',0.05);
+    for(let i=0;i<level*8;i++){
+      const d=document.createElement('div');d.className='raindrop';
+      d.style.left=(Math.random()*100)+'%';
+      d.style.animationDuration=(0.7-level*0.1+Math.random()*0.3)+'s';
+      drops.appendChild(d); setTimeout(()=>d.remove(),1500);
+    }
+    taskHintUpdate(`雨 势 · 第 ${level} 档 · ${count}/7`, 'tip-light');
+    if(count>=7){stage.removeEventListener('pointerdown',tap);setTimeout(()=>{sg.classList.remove('idle');sg.classList.add('celebrate');setTimeout(()=>finishRitual(term),800);},600);}
+  }
+  stage.addEventListener('pointerdown',tap);
+}
+
+/* ===== 10. 夏至 · 听蝉 ===== */
+function playCicada(term){
+  lockVessel();
+  const v=$('#vessel'); v.classList.add('idle');
+  const sg=$('#sage'); sg.classList.add('idle');
+  const stage=dyn('div','cicada-stage');
+  const cic=dyn('div','cicada-icon');
+  const scale=[523.25,587.33,659.25,698.46,783.99];
+  taskHintUpdate('连 点 7 次 · 收 集 五 音 蝉 声', 'tip-light');
+  let count=0, collected=new Set();
+  function tap(){
+    count++;
+    cic.classList.remove('buzz'); void cic.offsetWidth; cic.classList.add('buzz');
+    const idx=Math.floor(Math.random()*5); collected.add(idx);
+    beep(scale[idx],0.12,'triangle',0.05);
+    const note=document.createElement('div');note.className='note-pop';
+    note.textContent=['宫','商','角','徵','羽'][idx];
+    note.style.left=(Math.random()*70+15)+'%'; note.style.top=(Math.random()*40+30)+'%';
+    stage.appendChild(note); setTimeout(()=>note.remove(),1400);
+    taskHintUpdate(`蝉 鸣 · ${count}/7 · 已 集 ${collected.size}/5`, 'tip-light');
+    if(count>=7){
+      stage.removeEventListener('pointerdown',tap);
+      if(collected.size>=5) scale.forEach((f,i)=>setTimeout(()=>beep(f,0.3,'triangle',0.05),i*80));
+      setTimeout(()=>{sg.classList.remove('idle');sg.classList.add('celebrate');setTimeout(()=>finishRitual(term),800);},800);
+    }
+  }
+  stage.addEventListener('pointerdown',tap);
+}
+
+/* ===== 11. 小暑 · 晒书 ===== */
+function playPage(term){
+  lockVessel();
+  const v=$('#vessel'); v.classList.add('idle');
+  const sg=$('#sage'); sg.classList.add('idle');
+  const stage=dyn('div','page-stage');
+  const book=dyn('div','page-book');
+  for(let i=0;i<7;i++){const p=document.createElement('div');p.className='page-flip';p.dataset.idx=i;book.appendChild(p);}
+  taskHintUpdate('连 点 7 次 · 翻 经 五 页', 'tip-light');
+  let count=0;
+  function tap(){
+    count++;
+    const page=book.querySelector(`.page-flip[data-idx="${count-1}"]`);
+    if(page) page.classList.add('flipped');
+    beep(800-count*30,0.05,'sine',0.04);
+    taskHintUpdate(`翻 经 · ${count}/7`, 'tip-light');
+    if(count>=7){stage.removeEventListener('pointerdown',tap);setTimeout(()=>{sg.classList.remove('idle');sg.classList.add('celebrate');setTimeout(()=>finishRitual(term),800);},500);}
+  }
+  stage.addEventListener('pointerdown',tap);
+}
+
+/* ===== 12. 大暑 · 萤火 ===== */
+function playFirefly(term){
+  lockVessel();
+  const v=$('#vessel'); v.classList.add('idle');
+  const sg=$('#sage'); sg.classList.add('idle');
+  const stage=dyn('div','firefly-stage');
+  const word=dyn('div','firefly-word','夏');
+  taskHintUpdate('点 击 7 处 · 萤 火 聚 字', 'tip-light');
+  let count=0;
+  function tap(e){
+    if(count>=7) return;
+    count++;
+    const r=stage.getBoundingClientRect();
+    const f=document.createElement('div');f.className='firefly';
+    f.style.left=(e.clientX-r.left)+'px';f.style.top=(e.clientY-r.top)+'px';
+    stage.appendChild(f);
+    beep(660+count*40,0.05,'sine',0.04);
+    taskHintUpdate(`萤 火 · ${count}/7`, 'tip-light');
+    if(count>=7){
+      stage.removeEventListener('pointerdown',tap);
+      word.style.opacity='1';
+      $$('.firefly').forEach((f,i)=>{
+        f.classList.add('gathering');
+        f.style.setProperty('--tx',(50+Math.cos(i*0.9)*30)+'%');
+        f.style.setProperty('--ty',(50+Math.sin(i*0.9)*30)+'%');
+      });
+      setTimeout(()=>{sg.classList.remove('idle');sg.classList.add('celebrate');setTimeout(()=>finishRitual(term),900);},1400);
+    }
+  }
+  stage.addEventListener('pointerdown',tap);
+}
+
+/* ===== 13. 立秋 · 悬秤 ===== */
+function playScale(term){
+  lockVessel();
+  const v=$('#vessel'); v.classList.add('idle');
+  const sg=$('#sage'); sg.classList.add('idle');
+  const stage=dyn('div','scale-stage');
+  const beam=dyn('div','scale-beam');
+  const num=dyn('div','scale-num','0');
+  taskHintUpdate('长 按 秤 杆 · 悬 秤 知 秋', 'tip-light');
+  let ht=0;
+  holdTap(beam,
+    ()=>{ beam.classList.add('swinging'); beep(420,0.06,'sine',0.04); },
+    (t)=>{ ht=t; beam.style.setProperty('--swing',Math.sin(t*Math.PI*6)*12*(1-t)); num.textContent=Math.floor(t*150); taskHintUpdate(`悬 秤 · ${Math.floor(t*100)}%`, 'tip-light'); },
+    ()=>{ beam.classList.remove('swinging'); beam.classList.add('balanced'); num.textContent=Math.floor(ht*150)+' 斤'; setTimeout(()=>{sg.classList.remove('idle');sg.classList.add('celebrate');setTimeout(()=>finishRitual(term),700);},600); },
+    ()=>{ beam.classList.remove('swinging'); },
+    1800
+  );
+}
+
+/* ===== 14. 处暑 · 放河灯 ===== */
+function playLantern(term){
+  lockVessel();
+  const v=$('#vessel'); v.classList.add('idle');
+  const sg=$('#sage'); sg.classList.add('idle');
+  const stage=dyn('div','lantern-stage');
+  const lnt=dyn('img','lantern-img'); lnt.src=getAssetUrl(term.vessel);
+  const glow=dyn('div','lantern-glow');
+  taskHintUpdate('长 按 莲 瓣 灯 · 注 光 入 灯', 'tip-light');
+  holdTap(lnt,
+    ()=>{ glow.classList.add('filling'); beep(440,0.06,'sine',0.04); },
+    (t)=>{ glow.style.setProperty('--p',t); },
+    ()=>{
+      glow.classList.remove('filling'); glow.classList.add('full');
+      setTimeout(()=>{lnt.classList.add('floating');glow.classList.add('floating');},500);
+      const r=document.createElement('div');r.className='water-ripple';dyn('div','lantern-water').appendChild(r);
+      setTimeout(()=>r.remove(),3000);
+      setTimeout(()=>{sg.classList.remove('idle');sg.classList.add('celebrate');setTimeout(()=>finishRitual(term),800);},2500);
+    },
+    ()=>{ glow.classList.remove('filling'); taskHintUpdate('长 按 莲 瓣 灯', 'tip-light'); },
+    1600
+  );
+}
+
+/* ===== 15. 白露 · 候雁 ===== */
+function playGoose(term){
+  lockVessel();
+  const v=$('#vessel'); v.classList.add('idle');
+  const sg=$('#sage'); sg.classList.add('idle');
+  const stage=dyn('div','goose-stage');
+  const geese=[];
+  for(let i=0;i<7;i++){const g=document.createElement('div');g.className='goose';g.textContent='𪄂';g.style.left=(Math.random()*80+10)+'%';g.style.top=(Math.random()*40+30)+'%';stage.appendChild(g);geese.push(g);}
+  taskHintUpdate('连 点 7 次 · 候 雁 成 阵', 'tip-light');
+  let count=0;
+  const positions=[{l:20,t:40},{l:28,t:48},{l:36,t:56},{l:52,t:48},{l:64,t:56},{l:72,t:48},{l:80,t:40}];
+  function tap(){
+    count++;
+    if(geese[count-1]){geese[count-1].classList.add('active');geese[count-1].style.left=positions[count-1].l+'%';geese[count-1].style.top=positions[count-1].t+'%';geese[count-1].style.transform=`rotate(${count<4?-15:15}deg)`;}
+    beep(560+count*20,0.05,'sine',0.04);
+    taskHintUpdate(`候 雁 · ${count}/7`, 'tip-light');
+    if(count>=7){stage.removeEventListener('pointerdown',tap);setTimeout(()=>{sg.classList.remove('idle');sg.classList.add('celebrate');setTimeout(()=>finishRitual(term),800);},600);}
+  }
+  stage.addEventListener('pointerdown',tap);
+}
+
+/* ===== 16. 秋分 · 候月 ===== */
+function playMoon(term){
+  lockVessel();
+  const v=$('#vessel'); v.classList.add('idle');
+  const sg=$('#sage'); sg.classList.add('idle');
+  const stage=dyn('div','moon-stage');
+  const moon=dyn('div','moon-disc');
+  const phases=['新月','眉月','上弦','盈凸','满月'];
+  let phaseIdx=0;
+  taskHintUpdate('长 按 月 轮 · 叩 月 候 相', 'tip-light');
+  holdTap(moon,
+    ()=>{ beep(380,0.06,'sine',0.04); moon.classList.add('glowing'); },
+    (t)=>{ moon.style.setProperty('--p',t); },
+    ()=>{
+      moon.classList.remove('glowing');
+      phaseIdx=Math.min(phases.length-1,phaseIdx+1);
+      moon.classList.add(`phase-${phaseIdx}`);
+      beep(660-phaseIdx*80,0.08,'sine',0.05);
+      const label=dyn('div','moon-label',phases[phaseIdx]);
+      setTimeout(()=>label.remove(),1500);
+      if(phaseIdx>=phases.length-1){
+        spawnMoonPetals(stage);
+        setTimeout(()=>{sg.classList.remove('idle');sg.classList.add('celebrate');setTimeout(()=>finishRitual(term),800);},800);
+      } else {
+        taskHintUpdate(`月 相 · ${phases[phaseIdx]} · 再 叩 一 次`, 'tip-light');
+      }
+    },
+    ()=>{ moon.classList.remove('glowing'); },
+    1500
+  );
+  function spawnMoonPetals(stage){
+    for(let i=0;i<16;i++){const p=document.createElement('div');p.className='moon-petal';p.style.left=(Math.random()*100)+'%';p.style.animationDuration=(3+Math.random()*2)+'s';stage.appendChild(p);setTimeout(()=>p.remove(),5000);}
+  }
+}
+
+/* ===== 17. 寒露 · 登高 ===== */
+function playClimb(term){
+  lockVessel();
+  const v=$('#vessel'); v.classList.add('idle');
+  const sg=$('#sage'); sg.classList.add('idle');
+  const stage=dyn('div','climb-stage');
+  const path=dyn('div','climb-path');
+  const peak=dyn('div','climb-peak');
+  const flowers=dyn('div','climb-flowers');
+  for(let i=0;i<12;i++){const f=document.createElement('img');f.src=getAssetUrl(term.flower);f.className='climb-flower';f.style.left=(Math.random()*90)+'%';f.style.bottom=(Math.random()*30)+'%';f.style.animationDelay=(Math.random()*2)+'s';flowers.appendChild(f);}
+  taskHintUpdate('长 按 · 登 顶 赏 菊', 'tip-light');
+  holdTap(path,
+    ()=>{ beep(440,0.06,'sine',0.04); path.classList.add('climbing'); },
+    (t)=>{ path.style.setProperty('--p',t); if(t>0.7) peak.classList.add('show'); taskHintUpdate(`登 高 · ${Math.round(t*100)}%`, 'tip-light'); },
+    ()=>{ path.classList.remove('climbing'); path.classList.add('summit'); peak.classList.add('shown'); setTimeout(()=>{sg.classList.remove('idle');sg.classList.add('celebrate');setTimeout(()=>finishRitual(term),700);},700); },
+    ()=>{ path.classList.remove('climbing'); },
+    2000
+  );
+}
+
+/* ===== 18. 霜降 · 饮酒 ===== */
+function playWine(term){
+  lockVessel();
+  const v=$('#vessel'); v.classList.add('idle');
+  const sg=$('#sage'); sg.classList.add('idle');
+  const stage=dyn('div','wine-stage');
+  const cup=dyn('img','wine-cup'); cup.src=getAssetUrl(term.vessel);
+  const wine=dyn('div','wine-liquid');
+  const leaves=dyn('div','wine-leaves');
+  taskHintUpdate('长 按 酒 盏 · 举 杯 饮 酒', 'tip-light');
+  holdTap(cup,
+    ()=>{ cup.classList.add('lifting'); beep(440,0.06,'sine',0.04); },
+    (t)=>{ wine.style.setProperty('--p',t); cup.style.transform=`rotate(${-30*t}deg) translateY(${-20*t}px)`; taskHintUpdate(`举 杯 · ${Math.round(t*100)}%`, 'tip-light'); },
+    ()=>{
+      cup.classList.remove('lifting'); cup.classList.add('cheers');
+      for(let i=0;i<24;i++){const l=document.createElement('div');l.className='red-leaf';l.style.left=(Math.random()*100)+'%';l.style.animationDuration=(3+Math.random()*2)+'s';l.style.animationDelay=(Math.random()*1)+'s';leaves.appendChild(l);setTimeout(()=>l.remove(),5000);}
+      setTimeout(()=>{sg.classList.remove('idle');sg.classList.add('celebrate');setTimeout(()=>finishRitual(term),800);},1200);
+    },
+    ()=>{ cup.classList.remove('lifting'); },
+    1500
+  );
+}
+
+/* ===== 19. 立冬 · 围炉 ===== */
+function playFireplace(term){
+  lockVessel();
+  const v=$('#vessel'); v.classList.add('idle');
+  const sg=$('#sage'); sg.classList.add('idle');
+  const stage=dyn('div','fireplace-stage');
+  const fire=dyn('div','fire-glow');
+  const chestnuts=dyn('div','fire-chestnuts');
+  for(let i=0;i<7;i++){const c=document.createElement('div');c.className='chestnut';c.style.left=(10+(i%4)*25)+'%';c.style.bottom=(5+Math.floor(i/4)*20)+'%';chestnuts.appendChild(c);}
+  taskHintUpdate('连 点 7 次 · 围 炉 烤 栗', 'tip-light');
+  let count=0;
+  function tap(){
+    count++;
+    fire.style.setProperty('--level',count); fire.classList.add('puff'); setTimeout(()=>fire.classList.remove('puff'),600);
+    const cl=chestnuts.querySelectorAll('.chestnut'); if(cl[count-1]) cl[count-1].classList.add('roasted');
+    beep(180+count*30,0.06,'triangle',0.05);
+    taskHintUpdate(`围 炉 · ${count}/7`, 'tip-light');
+    if(count>=7){stage.removeEventListener('pointerdown',tap);setTimeout(()=>{sg.classList.remove('idle');sg.classList.add('celebrate');setTimeout(()=>finishRitual(term),800);},600);}
+  }
+  stage.addEventListener('pointerdown',tap);
+}
+
+/* ===== 20. 小雪 · 折梅 ===== */
+function playPlum(term){
+  lockVessel();
+  const v=$('#vessel'); v.classList.add('idle');
+  const sg=$('#sage'); sg.classList.add('idle');
+  const stage=dyn('div','plum-stage');
+  const branch=dyn('img','plum-branch'); branch.src=getAssetUrl(term.vessel);
+  const positions=[{l:30,t:30},{l:42,t:20},{l:50,t:35},{l:58,t:25},{l:65,t:40},{l:55,t:55},{l:40,t:50}];
+  positions.forEach((p,i)=>{const s=document.createElement('div');s.className='plum-spot';s.style.left=p.l+'%';s.style.top=p.t+'%';s.dataset.idx=i;stage.appendChild(s);});
+  taskHintUpdate('连 点 7 处 · 折 梅 入 瓶', 'tip-light');
+  let count=0;
+  function tap(e){
+    if(count>=7) return;
+    const r=stage.getBoundingClientRect();
+    let nearest=null, minD=Infinity;
+    $$('.plum-spot').forEach(s=>{
+      if(s.classList.contains('lit')) return;
+      const sr=s.getBoundingClientRect(); const d=Math.hypot(sr.left+sr.width/2-e.clientX,sr.top+sr.height/2-e.clientY);
+      if(d<minD){minD=d;nearest=s;}
+    });
+    if(!nearest) return;
+    nearest.classList.add('lit'); count++;
+    beep(660+count*30,0.05,'sine',0.04);
+    taskHintUpdate(`折 梅 · ${count}/7`, 'tip-light');
+    if(count>=7){
+      stage.removeEventListener('pointerdown',tap);
+      const snow=dyn('div','plum-snow');
+      for(let i=0;i<20;i++){const s=document.createElement('div');s.className='snow-flake';s.style.left=(Math.random()*100)+'%';s.style.animationDuration=(4+Math.random()*3)+'s';snow.appendChild(s);setTimeout(()=>s.remove(),7000);}
+      setTimeout(()=>{sg.classList.remove('idle');sg.classList.add('celebrate');setTimeout(()=>finishRitual(term),800);},1000);
+    }
+  }
+  stage.addEventListener('pointerdown',tap);
+}
+
+/* ===== 21. 大雪 · 观鹳 ===== */
+function playCrane(term){
+  lockVessel();
+  const v=$('#vessel'); v.classList.add('idle');
+  const sg=$('#sage'); sg.classList.add('idle');
+  const stage=dyn('div','crane-stage');
+  const cranes=[];
+  for(let i=0;i<7;i++){const c=document.createElement('div');c.className='crane';c.textContent='𪇮';c.style.left=(Math.random()*80+10)+'%';c.style.top=(Math.random()*40+30)+'%';stage.appendChild(c);cranes.push(c);}
+  taskHintUpdate('连 点 7 处 · 观 鹤 列 阵', 'tip-light');
+  let count=0;
+  function tap(){
+    if(count>=7) return;
+    count++;
+    const c=cranes[count-1];
+    if(c){c.classList.add('active');const angle=(Math.PI/6)*(count-4);c.style.left=(50+Math.sin(angle)*30)+'%';c.style.top=(40-Math.cos(angle)*20)+'%';c.style.transform=`rotate(${angle*180/Math.PI}deg)`;}
+    beep(540+count*20,0.05,'sine',0.04);
+    taskHintUpdate(`鹤 阵 · ${count}/7`, 'tip-light');
+    if(count>=7){stage.removeEventListener('pointerdown',tap);setTimeout(()=>{sg.classList.remove('idle');sg.classList.add('celebrate');setTimeout(()=>finishRitual(term),800);},600);}
+  }
+  stage.addEventListener('pointerdown',tap);
+}
+
+/* ===== 22. 冬至 · 写九 ===== */
+function playWrite(term){
+  lockVessel();
+  const v=$('#vessel'); v.classList.add('idle');
+  const sg=$('#sage'); sg.classList.add('idle');
+  const stage=dyn('div','write-stage');
+  const canvas=document.createElement('canvas');canvas.className='write-canvas';stage.appendChild(canvas);
+  const ctx=canvas.getContext('2d');
+  function resize(){const r=stage.getBoundingClientRect();canvas.width=r.width;canvas.height=r.height;}
+  resize(); window.addEventListener('resize',resize);
+  taskHintUpdate('长 按 · 写 九 · 阳 气 初 生', 'tip-light');
+  holdTap(stage,
+    ()=>{ beep(440,0.06,'sine',0.04); },
+    (t)=>{
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      const cx=canvas.width*0.5,cy=canvas.height*0.5;
+      ctx.strokeStyle=`rgba(245,232,210,${t})`; ctx.lineWidth=10; ctx.lineCap='round';
+      ctx.beginPath();ctx.moveTo(cx-40,cy-60);ctx.lineTo(cx+30,cy-60);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(cx+20,cy-60);ctx.lineTo(cx-20,cy+30);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(cx-20,cy+30);ctx.lineTo(cx-50,cy+60);ctx.stroke();
+      taskHintUpdate(`写 九 · ${Math.round(t*100)}%`, 'tip-light');
+    },
+    ()=>{ dyn('div','sunrise'); setTimeout(()=>{sg.classList.remove('idle');sg.classList.add('celebrate');setTimeout(()=>finishRitual(term),1200);},400); },
+    ()=>{}, 2200
+  );
+}
+
+/* ===== 23. 小寒 · 画梅 ===== */
+function playPaint(term){
+  lockVessel();
+  const v=$('#vessel'); v.classList.add('idle');
+  const sg=$('#sage'); sg.classList.add('idle');
+  const stage=dyn('div','paint-stage');
+  const canvas=document.createElement('canvas');canvas.className='paint-canvas';stage.appendChild(canvas);
+  const ctx=canvas.getContext('2d');
+  function resize(){const r=stage.getBoundingClientRect();canvas.width=r.width;canvas.height=r.height;}
+  resize(); window.addEventListener('resize',resize);
+  taskHintUpdate('长 按 · 画 梅 一 枝', 'tip-light');
+  const curved=[[{x:.2,y:.95},{x:.3,y:.85},{x:.4,y:.7},{x:.5,y:.55},{x:.6,y:.4},{x:.7,y:.3},{x:.8,y:.25}]];
+  const flowers=[{x:.35,y:.78},{x:.45,y:.65},{x:.55,y:.5},{x:.6,y:.42},{x:.65,y:.32},{x:.7,y:.28},{x:.78,y:.24}];
+  holdTap(stage,
+    ()=>{ beep(420,0.06,'sine',0.04); },
+    (t)=>{
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      ctx.strokeStyle=`rgba(60,40,30,${Math.min(1,t*1.5)})`; ctx.lineWidth=4; ctx.lineCap='round';
+      const total=curved[0].length; const visible=Math.max(2,Math.floor(t*total));
+      ctx.beginPath();
+      for(let i=0;i<visible;i++){const p=curved[0][i];const x=p.x*canvas.width,y=p.y*canvas.height;if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);}
+      ctx.stroke();
+      if(t>0.5)flowers.forEach((f,i)=>{if(t>0.5+i*0.05){const x=f.x*canvas.width,y=f.y*canvas.height;ctx.fillStyle='#a83228';ctx.beginPath();ctx.arc(x,y,5,0,Math.PI*2);ctx.fill();ctx.fillStyle='#f5e8d2';ctx.beginPath();ctx.arc(x,y,2,0,Math.PI*2);ctx.fill();}});
+      taskHintUpdate(`画 梅 · ${Math.round(t*100)}%`, 'tip-light');
+    },
+    ()=>{ setTimeout(()=>{sg.classList.remove('idle');sg.classList.add('celebrate');setTimeout(()=>finishRitual(term),800);},500); },
+    ()=>{}, 2200
+  );
+}
+
+/* ===== 24. 大寒 · 守岁 ===== */
+function playCountdown(term){
+  lockVessel();
+  const v=$('#vessel'); v.classList.add('idle');
+  const sg=$('#sage'); sg.classList.add('idle');
+  const stage=dyn('div','countdown-stage');
+  const clock=dyn('div','countdown-clock','5');
+  const lnt=dyn('img','countdown-lantern'); lnt.src=getAssetUrl(term.vessel);
+  const light=dyn('div','countdown-light');
+  taskHintUpdate('长 按 · 守 岁 收 卷（5 秒）', 'tip-red');
+  let holdStart=0, lastBeep=0;
+  holdTap(stage,
+    ()=>{ holdStart=performance.now(); clock.classList.add('active'); beep(330,0.06,'sine',0.04); },
+    (t)=>{
+      const elapsed=(performance.now()-holdStart)/1000; const remain=Math.max(0,5-elapsed);
+      clock.textContent=remain.toFixed(1); clock.style.setProperty('--p',t);
+      light.style.setProperty('--p',t);
+      const sec=Math.floor(elapsed); if(sec>lastBeep){lastBeep=sec;beep(440+sec*60,0.05,'sine',0.04);}
+      taskHintUpdate(`守 岁 · ${remain.toFixed(1)} 秒`, 'tip-red');
+    },
+    ()=>{
+      clock.classList.remove('active'); clock.classList.add('done'); clock.textContent='0';
+      lnt.classList.add('lit'); light.classList.add('full');
+      for(let i=0;i<3;i++) setTimeout(()=>spawnFirework(stage),i*400);
+      setTimeout(()=>{sg.classList.remove('idle');sg.classList.add('celebrate');setTimeout(()=>finishRitual(term),1500);},1200);
+    },
+    ()=>{ clock.classList.remove('active'); clock.textContent='5'; light.style.setProperty('--p',0); },
+    5000
+  );
+  function spawnFirework(stage){
+    const x=Math.random()*70+15, y=Math.random()*40+25;
+    for(let i=0;i<18;i++){const p=document.createElement('div');p.className='firework-spark';const angle=(Math.PI*2*i)/18;p.style.setProperty('--tx',Math.cos(angle)*60+'px');p.style.setProperty('--ty',Math.sin(angle)*60+'px');p.style.left=x+'%';p.style.top=y+'%';p.style.background=['#e8a857','#a83228','#f0d4a4','#e6b86e'][i%4];stage.appendChild(p);setTimeout(()=>p.remove(),1500);}
+  }
+}
+
+/* ===== 调度表 ===== */
+const RITUAL_ENGINES = {
+  'tea':         playTea,
+  'brush':       playBrush,
+  'drum':        playDrum,
+  'kite':        playKite,
+  'incense':     playIncense,
+  'tea-select':  playTeaSelect,
+  'hairpin':     playHairpin,
+  'pour':        playPour,
+  'rain':        playRain,
+  'cicada':      playCicada,
+  'page':        playPage,
+  'firefly':     playFirefly,
+  'scale':       playScale,
+  'lantern':     playLantern,
+  'goose':       playGoose,
+  'moon':        playMoon,
+  'climb':       playClimb,
+  'wine':        playWine,
+  'fireplace':   playFireplace,
+  'plum':        playPlum,
+  'crane':       playCrane,
+  'write':       playWrite,
+  'paint':       playPaint,
+  'countdown':   playCountdown,
+};
+
+function startRitual(){
+  const t = currentTerm();
+  goto('ritual');
+  state.phase=1; state.ritualStep=0; updateStatus();
+  beep(523,0.12,'sine',0.05);
+  $('#ritualBg').src = getAssetUrl(t.bg);
+  $('#sage').src = getAssetUrl(t.child);
+  $('#vessel').src = getAssetUrl(t.vessel);
+  $('#inkText').textContent = t.title.split('·')[0].slice(0,4);
+  gsap.fromTo($('#sage'),{y:60,opacity:0},{y:0,opacity:1,duration:1.2,ease:'power2.out'});
+  clearDyn(); unlockVessel();
+  $('#pourProgress').classList.remove('show');
+  $('#pourCounter').classList.remove('show');
+  $('#beatZone').style.display='none'; $('#beatZone').classList.remove('active');
+  $('#beatProgress').classList.remove('show'); $('#beatCounter').classList.remove('show');
+  $('#beatProgress').innerHTML='';
+  const sub=$('#ritualSubtitle'); sub.textContent=t.ritualLabel; sub.classList.add('show');
+
+  // === 防御层 1：兜底 STAGE 监听器，确保任何点击都能给出反馈 ===
+  // 即使具体仪式的监听器失效，用户点击也至少触发视觉反馈
+  let _lastTapTs = 0;
+  trackedListener(STAGE, 'pointerdown', (e) => {
+    const now = performance.now();
+    if (now - _lastTapTs < 80) return; // 防抖
+    _lastTapTs = now;
+    // 不干扰具体仪式逻辑，仅作视觉提示
+    if (e.target.closest('#vessel') || e.target.closest('.tap-halo') || e.target.closest('#beatZone')) return;
+    // 给点击位置一个小的波纹反馈
+    spawnTapRipple(e.clientX, e.clientY);
+  });
+
+  // === 防御层 2：调用具体仪式引擎（如果失败，给出提示）===
+  try {
+    const fn = RITUAL_ENGINES[t.ritualType] || playTea;
+    fn(t);
+  } catch(err){
+    console.error('[仪式启动失败]', t.ritualType, err);
+    taskHintUpdate('仪 式 故 障 · 点 击 任 意 处 重 试', 'tip-red');
+    trackedListener(STAGE, 'click', () => {
+      try { (RITUAL_ENGINES[t.ritualType]||playTea)(t); }
+      catch(e2){ console.error('[重试失败]', e2); }
+    }, { once: true });
+  }
+
+  // === 防御层 3：5 秒后启用双击跳过（应急逃生口）===
+  setTimeout(() => {
+    let _dblTap = 0;
+    const skipHandler = (e) => {
+      // 仪式已完成则不响应
+      if (state.phase >= 3) return;
+      // 不响应仪式内部关键节点的点击
+      if (e.target.closest('#vessel') && state.ritualStep > 0 && state.ritualStep < 7) return;
+      const now = performance.now();
+      if (now - _dblTap < 600 && now - _dblTap > 80){
+        _dblTap = 0;
+        // 双击：直接完成
+        if (typeof gsap !== 'undefined'){
+          gsap.to('#sage', { scale: 1.15, duration: 0.2, yoyo: true, repeat: 1 });
+        }
+        beep(660, 0.15, 'sine', 0.06); beep(880, 0.15, 'sine', 0.06);
+        setTimeout(() => finishRitual(t), 200);
+      } else {
+        _dblTap = now;
+      }
+    };
+    trackedListener(STAGE, 'pointerdown', skipHandler);
+    // 提示用户：5s 后可用双击
+    if (typeof gsap !== 'undefined'){
+      gsap.to('#taskHint', { opacity: 0.7, duration: 0.3 });
+    }
+  }, 5000);
+}
+
+// 在点击位置生成一个小波纹
+function spawnTapRipple(x, y){
+  const stage = $('#ritualScene');
+  if (!stage) return;
+  const sr = stage.getBoundingClientRect();
+  const r = document.createElement('div');
+  r.className = 'tap-ripple';
+  r.style.left = (x - sr.left - 18) + 'px';
+  r.style.top = (y - sr.top - 18) + 'px';
+  stage.appendChild(r);
+  setTimeout(() => r.remove(), 700);
+}
+
+function finishRitual(term){
+  state.phase=3; updateStatus();
+  clearDyn();
+  $('#beatZone').style.display='none'; $('#beatProgress').classList.remove('show'); $('#beatCounter').classList.remove('show');
+  hideTapHalo();
+  const sg=$('#sage'); sg.classList.remove('idle'); sg.classList.add('celebrate');
+  setTimeout(()=>{sg.classList.remove('celebrate');sg.classList.add('idle');},1400);
+  const ink=$('#inkText'); ink.textContent=term.title.split('·')[0].slice(0,4);
+  ink.classList.remove('show'); void ink.offsetWidth; ink.classList.add('show');
+  gong();
+  taskHintUpdate(`仪 · 完 满 · ${term.ritualQuote}`, 'tip-light');
+  setTimeout(()=>markTermCompleted(term.id),600);
+  setTimeout(()=>taskHintUpdate('点 击 任 意 处 · 查 看 物 候 档 案',''),2200);
+  setTimeout(()=>showDetail(),3600);
+}
+
+/* ---------- 物候档案 ---------- */
+function showDetail(){
+  goto('detail');
+  const t = currentTerm();
+  const sheet = $('#archiveSheet');
+  sheet.innerHTML = renderArchive(t);
+  sheet.scrollTop = 0;
+
+  // 重置动画
+  sheet.style.animation = 'none';
+  void sheet.offsetWidth;
+  sheet.style.animation = '';
+  $$('.archive-sheet .section').forEach(s => {
+    s.style.animation = 'none';
+    void s.offsetWidth;
+    s.style.animation = '';
+  });
+
+  // 标记完成
+  markTermCompleted(t.id);
+}
+
+function renderArchive(t){
+  return `
+    <p class="a-kicker">${t.month} · ${t.solarDate} · ${t.season}</p>
+    <h2>${t.name}</h2>
+    <p class="a-sub">${t.en} · ${t.pinyin}</p>
+
+    <div class="section">
+      <div class="section-title">三 候</div>
+      ${t.threeHou.map(h => `
+        <div class="h3-row">
+          <div class="h3-no">${h.no}</div>
+          <div class="h3-text">${h.name}<small>${h.note}</small></div>
+        </div>
+      `).join('')}
+    </div>
+
+    <div class="section">
+      <div class="section-title">应 令 诗</div>
+      <div class="poem">
+        ${t.poem.text}
+        <span class="author">— ${t.poem.author}</span>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">物 候 卷 轴</div>
+      <div class="pheno-row">
+        <div class="pheno-cell"><img src="${getAssetUrl(t.pheno.sprout)}" alt="萌"><div class="pheno-label">萌</div></div>
+        <div class="pheno-cell"><img src="${getAssetUrl(t.pheno.shoot)}" alt="抽"><div class="pheno-label">抽</div></div>
+        <div class="pheno-cell"><img src="${getAssetUrl(t.pheno.bloom)}" alt="盈"><div class="pheno-label">盈</div></div>
+        <div class="pheno-cell"><img src="${getAssetUrl(t.pheno.store)}" alt="藏"><div class="pheno-label">藏</div></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">守 护 童 子</div>
+      <div class="object-row">
+        <img src="${getAssetUrl(t.child)}" alt="${t.name}童子">
+        <div class="obj-info">
+          <div class="obj-name">${t.name} · 节 气 童 子</div>
+          <div class="obj-desc">半拟人半物候，与玩家共行春日之路。</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">本 草</div>
+      <div class="object-row">
+        <img src="${getAssetUrl(t.herb)}" alt="${t.herbName}">
+        <div class="obj-info">
+          <div class="obj-name">${t.herbName}</div>
+          <div class="obj-desc">${t.herbDesc}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">主 器 物</div>
+      <div class="object-row">
+        <img src="${getAssetUrl(t.vessel)}" alt="${t.vesselName}">
+        <div class="obj-info">
+          <div class="obj-name">${t.vesselName}</div>
+          <div class="obj-desc">${t.vesselDesc}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">花 信 风</div>
+      <div class="flower-card">
+        <img src="${getAssetUrl(t.flower)}" alt="${t.flowerName}">
+        <div class="obj-info">
+          <div class="fl-name">${t.flowerName}</div>
+          <div class="fl-desc">${t.flowerDesc}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="seal-row">
+      <div class="seal-stamp">节 序 循 时</div>
+    </div>
+  `;
+}
+
+function markTermCompleted(termId){
+  try {
+    const done = JSON.parse(localStorage.getItem('jiexu-completed') || '{}');
+    done[termId] = true;
+    localStorage.setItem('jiexu-completed', JSON.stringify(done));
+    // 更新封面徽章
+    $$('.scroll-card').forEach(el => {
+      if (done[el.dataset.id]) el.classList.add('completed');
+    });
+  } catch{}
+}
+
+/* ---------- 档案动作 ---------- */
+$('#replayBtn').addEventListener('click', () => {
+  if (confirm('重 看 这 个 节 气 的 仪 式 ？')) {
+    state.phase = 0;
+    state.ritualStep = 0;
+    updateStatus();
+    startVolume();
+  }
+});
+$('#nextTermBtn').addEventListener('click', () => {
+  const nt = nextTerm();
+  if (nt){
+    state.termId = nt.id;
+    state.phase = 0;
+    state.ritualStep = 0;
+    updateTopbar();
+    updateStatus();
+    startVolume();
+  } else {
+    alert('已 是 最 后 一 个 节 气 · 大 寒 礼 成');
+  }
+});
+$('#backIntroBtn').addEventListener('click', () => {
+  goto('intro');
+  updateStatus();
+});
+
+/* ---------- 仪式场景中点击任意处进入档案 ---------- */
+$('#ritualScene').addEventListener('click', e => {
+  if (e.target.closest('#vessel') || e.target.closest('#beatZone')) return;
+  if (state.phase === 3) showDetail();
+});
+
+/* ---------- 状态条点击：进入对应阶段 ---------- */
+$$('#statusBar .status-cell').forEach((c, i) => {
+  c.addEventListener('click', () => {
+    gsap.fromTo(c, { scale: 1 }, { scale: 1.1, duration: 0.2, yoyo: true, repeat: 1 });
+    if (i === state.phase){
+      // 当前阶段：提示
+      showQuoteToast(`${PHASE_NAMES[i]} · ${PHASE_LABELS[i]}`, 1600);
+      return;
+    }
+    if (i < state.phase){
+      // 已完成：跳回查看
+      showQuoteToast(`${PHASE_NAMES[i]} · ${PHASE_LABELS[i]}`, 1600);
+      return;
+    }
+    // 未来阶段：尝试前进
+    if (i === 1 && state.phase === 0){
+      // 萌 → 抽：进入当前节气的仪式
+      showQuoteToast(`进入 · ${PHASE_LABELS[1]} · 仪 式`, 1200);
+      setTimeout(() => startRitual(), 200);
+      state.phase = 1; updateStatus();
+      return;
+    }
+    if (i === 2 && state.phase === 1){
+      // 抽 → 盈：当前阶段仪式未完成时不允许跳过
+      showQuoteToast(`请 先 完 满 当 前 仪 式`, 1400);
+      return;
+    }
+    if (i === 3 && state.phase === 2){
+      showQuoteToast(`请 先 完 成 击 拂`, 1400);
+      return;
+    }
+  });
+});
+
+/* ---------- 退出确认模态 ---------- */
+$$('#exitModal .choice').forEach(b => {
+  b.addEventListener('click', () => {
+    const a = b.dataset.action;
+    $('#exitModal').classList.remove('show');
+    if (a === 'exit') {
+      // 直接回封面
+      goto('intro');
+    }
+  });
+});
+
+/* ---------- 启动入口 ---------- */
+$('#startBtn').addEventListener('click', () => startBegin());
+
+/* ---------- 初始化 ---------- */
+(function init(){
+  // 数据已通过 INLINE_DATA 同步注入，无需等待
+  if (!DATA){
+    $('#startBtn').querySelector('span').textContent = '数 据 装 帧 中';
+    return;
+  }
+  buildTermTiles();
+  preloadAssets();
+
+  // 恢复已完成的节气徽章
+  try {
+    const done = JSON.parse(localStorage.getItem('jiexu-completed') || '{}');
+    $$('.scroll-card').forEach(el => {
+      if (done[el.dataset.id]) el.classList.add('completed');
+    });
+  } catch{}
+
+  // 启动粒子场
+  makePetalField($('#petalsIntro'),  { count: 18, speed: 1.2, colors: ['#f0d4a4','#e6b86e','#c9a857'] });
+  makePetalField($('#petalsArchive'),{ count: 12, speed: 0.7, colors: ['#e8c8a8','#f0d4a4'] });
+  makePetalField($('#petalsRitual'), { count: 14, speed: 1, colors: ['#e8c8a8','#e6b86e','#f0d4a4','#d8a868'] });
+  makePetalField($('#petalsVolume'), { count: 14, speed: 0.9, colors: ['#e8c8a8','#e6b86e','#f0d4a4'] });
+
+  updateStatus();
+})();
+</script>
+</body>
+</html>

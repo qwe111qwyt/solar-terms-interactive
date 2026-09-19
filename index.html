@@ -281,28 +281,29 @@ img{pointer-events:none;user-select:none;-webkit-user-drag:none}
 }
 /* 顶部：候次小印 + 拼音 */
 .scroll-card-head{
-  display:flex;align-items:flex-start;justify-content:space-between;
-  padding:8px 10px 6px;
+  display:flex;flex-direction:column;align-items:center;gap:3px;flex-shrink:0;
+  padding:6px 2px 5px;
   border-bottom:1px solid rgba(232,200,116,.18);
   background:linear-gradient(to bottom,rgba(232,200,116,.06),transparent);
 }
 .scroll-card-no{
-  font:600 9px/1 'Noto Serif SC',serif;letter-spacing:.18em;
+  font:600 7px/1 'Noto Serif SC',serif;letter-spacing:0;
   color:rgba(245,232,210,.65);
-  display:inline-flex;align-items:center;gap:5px;
+  display:inline-flex;align-items:center;gap:2px;white-space:nowrap;
 }
-.scroll-card-no::before{content:'';display:inline-block;width:14px;height:1px;background:#e8c874}
+.scroll-card-no::before{content:'';display:inline-block;width:5px;height:1px;background:#e8c874}
 .scroll-card-pinyin{
-  font:500 8px/1 system-ui,serif;letter-spacing:.1em;color:rgba(232,200,116,.55);
+  max-width:100%;overflow-wrap:anywhere;text-align:center;
+  font:500 5px/1.1 system-ui,serif;letter-spacing:0;color:rgba(232,200,116,.55);
   text-transform:uppercase;
 }
 /* 中段：人物图 + 竖排题签 并排 */
 .scroll-card-mid{
-  display:flex;flex-direction:row;flex:1;align-items:stretch;
-  min-height:200px;
+  position:relative;display:flex;flex:1;align-items:stretch;
+  min-height:0;
 }
 .scroll-card-img{
-  position:relative;flex:1;min-width:0;min-height:180px;overflow:hidden;
+  position:absolute;inset:0;min-width:0;min-height:0;overflow:hidden;
   background:linear-gradient(135deg,#1a2420,#0a0e0c);
 }
 .scroll-card-img img{
@@ -318,16 +319,15 @@ img{pointer-events:none;user-select:none;-webkit-user-drag:none}
 }
 /* 右侧：竖排节气名（核心视觉） */
 .scroll-card-name{
-  font:700 30px/1.6 'STKaiti','KaiTi','楷体','Noto Serif SC',serif;
+  z-index:1;width:100%;min-width:0;min-height:0;
+  font:700 24px/1.35 'STKaiti','KaiTi','楷体','Noto Serif SC',serif;
   color:#f5e8d2;
   writing-mode:vertical-rl;text-orientation:upright;
-  padding:18px 8px;
+  padding:12px 2px;
   background:
     linear-gradient(to right,rgba(232,200,116,.02),rgba(232,200,116,.10) 30%,rgba(232,200,116,.10) 70%,rgba(232,200,116,.02));
   border-left:1px solid rgba(232,200,116,.25);
   display:flex;align-items:flex-start;justify-content:center;
-  min-width:46px;
-  min-height:200px;
   flex-shrink:0;
   align-self:stretch;
   position:relative;
@@ -343,38 +343,44 @@ img{pointer-events:none;user-select:none;-webkit-user-drag:none}
 /* 竖排下的每个字 */
 .scroll-card-name-char > span{
   display:block;
-  line-height:1.4;
-  margin:6px 0;
+  line-height:1.25;
+  margin:3px 0;
   writing-mode:horizontal-tb;
 }
 /* 卡片右下小角注 */
 .scroll-card-meta{
-  display:flex;flex-direction:column;gap:3px;
-  padding:6px 10px 8px;
+  display:flex;align-items:flex-start;justify-content:center;gap:2px;flex-shrink:0;
+  min-height:72px;padding:5px 2px 6px;
   background:rgba(8,10,8,.5);
   border-top:1px solid rgba(232,200,116,.12);
 }
 .scroll-card-month{
-  font:500 9px/1.4 system-ui,serif;letter-spacing:.18em;
+  display:flex;align-items:flex-start;gap:2px;
+  font:500 7px/1 system-ui,serif;letter-spacing:0;
   color:rgba(232,200,116,.7);
 }
+.scroll-card-month > span{
+  writing-mode:vertical-rl;text-orientation:upright;white-space:nowrap;
+}
+.scroll-card-month > span:last-child{font-size:6px}
 .scroll-card-tag{
-  font:500 8.5px/1.4 system-ui,serif;letter-spacing:.18em;
+  writing-mode:vertical-rl;text-orientation:upright;white-space:nowrap;
+  font:500 7px/1 system-ui,serif;letter-spacing:0;
   color:rgba(245,232,210,.55);
 }
 /* 完成后朱印 */
 .scroll-card-seal{
-  position:absolute;top:6px;right:6px;z-index:3;
-  width:30px;height:30px;border-radius:2px;
+  position:absolute;top:36px;right:2px;z-index:3;
+  width:16px;height:22px;border-radius:2px;
   background:rgba(168,50,40,.9);color:#f5e8d2;
-  font:700 9px/1.05 'Noto Serif SC',serif;
+  font:700 6px/1 'Noto Serif SC',serif;
   display:flex;align-items:center;justify-content:center;text-align:center;
   writing-mode:vertical-rl;text-orientation:upright;
   letter-spacing:.05em;
   transform:rotate(-4deg);
   box-shadow:0 2px 6px rgba(0,0,0,.55);
   opacity:0;transition:opacity .35s ease;
-  padding:2px;
+  padding:1px;
 }
 .scroll-card.completed .scroll-card-seal{opacity:1}
 .scroll-card.completed{border-color:rgba(168,50,40,.55)}
@@ -1606,7 +1612,7 @@ function buildTermTiles(){
         </div>
       </div>
       <div class="scroll-card-meta">
-        <div class="scroll-card-month">${t.month} · ${t.solarDate}</div>
+        <div class="scroll-card-month"><span>${t.month}</span><span>${t.solarDate}</span></div>
         <div class="scroll-card-tag">${t.ritualLabel || ''}</div>
       </div>
       <span class="scroll-card-seal">礼<br>成</span>
